@@ -2,6 +2,7 @@ import { loadHtml, escapeHtml } from "../utils.js";
 import { openModal, closeModal } from "./modal.js";
 import { apiPost, apiGet } from "../api.js";
 import { showMap } from "../views/project.js"
+import { ManualSwapFlow } from "./swap_resolve_missing.js";
 
 
 let swapState = {
@@ -317,20 +318,35 @@ async function applyThresholds() {
 
 async function confirmSwap() {
     try {
-        await apiPost("/api/swap_hub", {
+        const suppliers = await apiPost("/api/swap_hub", {
             direct_cofors_to_add: Array.from(swapState.moved.hubToDirect),
             hub_cofors_to_add: Array.from(swapState.moved.directToHub),
         });
+        if (suppliers && suppliers.length > 0) {
+          const html = await loadHtml("../views_html/swap_resolve_missing.html");
+          openModal(html);
+          const availableHubs = await apiGet("/api/swap_hub/available_hubs");
+          const manualSwapFlow = new ManualSwapFlow(suppliers, availableHubs);
+          manualSwapFlow.init();
+          await manualSwapFlow.run();
+          alert("Swap resolved successfully.");
+          showMap();
+        } else {
+          alert("Swap applied successfully.");
+          closeModal();
+          showMap();
+        }
+        
     } catch(e) {
         if (e.type === 'CannotEditBaselineError') {
             alert(e.message);
             return;
         }
-        if (e.type === "HubKeyNotMapped")
+        if (e.type === "HubKeyNotMapped") {
             alert(e.message);
             return;
-        throw e;
+        } else {
+            throw e;
+        }
     }
-    closeModal();
-    showMap();
 }

@@ -104,6 +104,14 @@ class Scenario:
     def get_shippers_from_key(self, shippers_key):
         return frozenset(self.direct_shippers[shipper_cofor] for shipper_cofor in shippers_key)
 
+    def swap_shipper_network(self, shipper):
+        if shipper in self.hub_shippers:
+            self.hub_shippers.pop(shipper.cofor)
+            self.direct_shippers[shipper.cofor] = shipper
+        elif shipper in self.direct_shippers:
+            self.direct_shippers.pop(shipper.cofor)
+            self.hub_shippers[shipper.cofor] = shipper
+
     @property
     def all_shippers(self):
         return self.direct_shippers | self.hub_shippers

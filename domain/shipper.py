@@ -88,6 +88,7 @@ class Shipper:
         return {
             "name": self.name,
             "cofor": self.cofor,
+            "zip_key": self.zip_key(2),
             "total_weight": self.weight,
             "total_volume": self.volume,
             "total_loading_meters": self.loading_meters,

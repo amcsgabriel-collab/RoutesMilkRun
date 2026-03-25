@@ -13,9 +13,6 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   document.getElementById("menu-open").addEventListener("click", openLoadProjectWindow);
   document.getElementById("menu-save").addEventListener("click", saveProject);
   document.getElementById("menu-save-as").addEventListener("click", openSaveProjectAsWindow);
-  // Wiring up a "common" button for the global modal template.
-  document.getElementById("modal-close").addEventListener("click", closeModal) 
-
   // start at "start page".
   await showStartPage();
 });
@@ -40,7 +37,7 @@ export async function openLoadProjectWindow() {
   const path = await window.pywebview.api.open_rob_file();
   if (!path) return;
   try {
-    const res = await apiPost("/api/project/load", {path:path});
+    await apiPost("/api/project/load", {path:path});
     showProjectPage();
   } catch (err) {
     alert("Failed to load project: " + err.message);

@@ -427,9 +427,23 @@ def api_swap_apply_thresholds(data):
 @json_endpoint
 @with_pm_lock
 def api_swap_hub(data):
-    pm.swap_hub_direct(
+    shippers = pm.swap_hub_direct(
         data.get("direct_cofors_to_add"),
         data.get("hub_cofors_to_add"))
+    return success(shippers)
+
+
+@app.get("/api/swap_hub/available_hubs")
+def api_swap_available_hubs():
+    hubs = pm.current_scenario.get_in_use_hubs()
+    hubs_summary = [hub.short_summary for hub in hubs]
+    return success(hubs_summary)
+
+@app.post("/api/swap_hub/resolve")
+@json_endpoint
+@with_pm_lock
+def api_swap_resolve(data):
+    pm.resolve_swap_hub_direct(data.get("decisions"))
     return success()
 
 

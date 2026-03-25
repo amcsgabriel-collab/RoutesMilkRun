@@ -18,6 +18,8 @@ export function openModal(html, modalClass = "") {
   }
 
   mb.classList.remove("hidden");
+  // Wiring up a "common" button for the global modal template.
+  document.getElementById("modal-close").onclick = closeModal;
 }
 
 export function closeModal(){

@@ -185,6 +185,13 @@ class Hub:
             "coordinates": self.coordinates,
         }
 
+    @property
+    def short_summary(self):
+        return {
+            "name": self.name,
+            "cofor": self.cofor,
+        }
+
     def zip_key(self, digits: int = 2):
         print(self.zip_code)
         return self.country + self.zip_code[:digits]

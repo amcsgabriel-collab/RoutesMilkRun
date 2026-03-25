@@ -10,14 +10,14 @@ from paths import get_helper_path
 
 # Variables & Constants
 PLANT_COLOR = "#CE2900"
-HUB_ORIGINAL_COLOR = "#BDB000"
+HUB_ORIGINAL_COLOR = "#A3990B"
 HUB_NEW_COLOR = "#FFFB00"
 HUB_SECOND_LEG_COLOR = "#E27115"
 HUB_POINT_COLOR = "#E27115"
 DIRECT_MR_ORIGINAL_COLOR = "#0033FF"
 DIRECT_MR_NEW_COLOR = "#00A2FF"
 DIRECT_FTL_ORIGINAL_COLOR = "#4B0090"
-DIRECT_FTL_NEW_COLOR = "#8400FF"
+DIRECT_FTL_NEW_COLOR = "#FF31FF"
 
 
 def create_map():
@@ -312,10 +312,5 @@ def plot_route_map_embedded(scenario: Scenario) -> str:
     </div>
     """
     m.get_root().html.add_child(folium.Element(toggle_js))
-
     fit_map_to_routes(m, plant, routes)
-
-    path = get_helper_path('map.html')
-    m.save(path)
-
     return m.get_root().render()

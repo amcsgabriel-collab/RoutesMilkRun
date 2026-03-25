@@ -8,7 +8,7 @@ from domain.project import Project, ProjectMeta
 from domain.shipper import Shipper
 from repositories.project_repository import ProjectRepository
 from services.graf_exporter import export_graf
-from services.hub_direct_swapper import hub_assigner, hub_direct_swap_algorithm
+from services.hub_direct_swapper import HubAssigner, hub_direct_swap_algorithm
 from services.kpi_exporter import KpiExporter
 from services.map_generator import plot_route_map_embedded
 
@@ -204,14 +204,15 @@ class ProjectManager:
         current_direct_shippers = self.current_scenario.direct_shippers
         current_hub_shippers = self.current_scenario.hub_shippers
 
-        prepared_new_hub_shippers = hub_assigner(
-            direct_shippers=[current_direct_shippers[cofor]
-                             for cofor in hub_cofors_to_add
-                             if cofor in current_direct_shippers],
+        hub_assigner = HubAssigner(
             plant=self.current_project.context.plant,
             hubs=self.current_scenario.hubs,
             hub_tariffs=self.current_project.context.ltl_tariffs,
         )
+
+        prepared_new_hub_shippers, shippers_without_hub = hub_assigner.assign_hubs(direct_shippers=[current_direct_shippers[cofor]
+                             for cofor in hub_cofors_to_add
+                             if cofor in current_direct_shippers])
 
         prepared_new_direct_shippers = {cofor: current_hub_shippers[cofor] for cofor in direct_cofors_to_add}
 
@@ -222,12 +223,37 @@ class ProjectManager:
                                } | {cofor: current_hub_shippers[cofor] for cofor in direct_cofors_to_add}
 
         for hub in self.current_scenario.hubs:
-            hub.shippers = [s for s in hub.shippers if s not in prepared_new_direct_shippers]
+            hub.shippers = [
+                s for s in hub.shippers 
+                if s.cofor not in prepared_new_direct_shippers
+            ]
 
         self.current_scenario.hub_shippers = {cofor: shipper
                             for cofor, shipper in current_hub_shippers.items()
                             if cofor not in direct_cofors_to_add
                             } | {s.cofor: s for s in prepared_new_hub_shippers}
+        
+        hub_assigner.refresh_hubs()
+        self.update_map_html()
+        return [s.summary for s in shippers_without_hub]
+
+    def resolve_swap_hub_direct(self, decisions: list[dict]):
+        assigner = HubAssigner(plant=self.current_project.context.plant,
+                    hub_tariffs=self.current_project.context.ltl_tariffs,
+                    hubs=self.current_scenario.hubs)
+        for decision in decisions:
+            cofor = decision["cofor"]
+            action = decision["action"]
+            if action == "confirm_manual_swap":
+                selected_hub = decision["selectedHub"]
+                shipper = self.current_scenario.all_shippers[cofor]
+                self.current_scenario.swap_shipper_network(shipper)
+                assigner.manually_assign_hub(
+                    shipper=shipper,
+                    hub_cofor=selected_hub
+                )
+                
+        assigner.refresh_hubs()
         self.update_map_html()
 
     def lock_block_routes(self, from_side, mode, shippers_key):
