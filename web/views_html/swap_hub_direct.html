@@ -1,0 +1,55 @@
+<div class="modal-header">
+  <h3>Hub / Direct Swap</h3>
+</div>
+
+<div class="modal-body swap-editor">
+  <div class="swap-topbar">
+    <button type="button" id="btn-set-thresholds">Set thresholds</button>
+    <button type="button" id="btn-reset">Reset changes</button>
+    <button type="button" id="btn-baseline">Revert to baseline</button>
+  </div>
+
+  <div class="swap-dual-list">
+    <div class="swap-column">
+      <h4>Direct</h4>
+      <select id="direct-list" multiple size="18" class="swap-list"></select>
+    </div>
+
+    <div class="swap-actions">
+      <button type="button" id="btn-to-hub">&rarr;</button>
+      <button type="button" id="btn-to-direct">&larr;</button>
+    </div>
+
+    <div class="swap-column">
+      <h4>Hub</h4>
+      <select id="hub-list" multiple size="18" class="swap-list"></select>
+    </div>
+  </div>
+
+  <div id="swap-threshold-panel" class="hidden">
+    <div class="swap-row">
+      <label><input type="checkbox" id="chk-weight"> Weight threshold (kg)</label>
+      <input type="number" id="inp-weight" step="any" min="0" disabled>
+    </div>
+
+    <div class="swap-row">
+      <label><input type="checkbox" id="chk-volume"> Volume threshold (m³)</label>
+      <input type="number" id="inp-volume" step="any" min="0" disabled>
+    </div>
+
+    <div class="swap-row">
+      <label><input type="checkbox" id="chk-loading"> Loading meters threshold (m)</label>
+      <input type="number" id="inp-loading" step="any" min="0" disabled>
+    </div>
+
+    <div class="swap-threshold-actions">
+      <button type="button" id="btn-apply-thresholds">Apply thresholds</button>
+      <button type="button" id="btn-close-thresholds">Hide</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-footer">
+  <button type="button" id="swap-close">Close</button>
+  <button type="button" id="swap-confirm">Confirm</button>
+</div>
