@@ -125,7 +125,6 @@ class DemandDataTransformer:
             how="left",
             on="HUB COFOR"
         )
-        locations.to_csv('hub_zip_codes.csv')
 
     def filter_parts_only(self):
         self.database = self.database[self.database['Parts or Empties'] == 'P'] #TODO: Remove once empties implemented.

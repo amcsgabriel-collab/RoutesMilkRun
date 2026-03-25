@@ -58,7 +58,6 @@ class HubAssigner:
             .str.strip()
         )
         hub_helper["Country"] = hub_helper["Zip Key"].str[:2]
-        hub_helper.to_csv("debug_hub_helper.csv", index=False)
 
         return hub_helper
 

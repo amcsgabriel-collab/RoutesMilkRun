@@ -17,10 +17,6 @@ class RoutePatternRepository:
     ) -> dict[str, set[RoutePattern]]:
 
         patterns_by_vehicle: dict[str, set[RoutePattern]] = {}
-
-        if self._df['SHIPPER SOURCING REGION'].iloc[0] == "France":
-            self._df.to_csv('agg_route_df_debug.csv', sep=';')
-
         for route_name, group in self._df.groupby("Route name"):
             vehicle_id = group["Means of Transport"].iloc[0]
             shippers = {

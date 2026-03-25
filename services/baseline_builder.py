@@ -223,7 +223,6 @@ class BaselineBuilder:
 
     def create_tariffs(self):
         self.ftl_tariffs_database = TariffsTransformer(self.tariffs_database).transform_tariffs('ftl', plant_cofor=self.plant.cofor)
-        self.ftl_tariffs_database.to_csv('ftl_tariffs.csv')
         self.ftl_tariffs = ftl_tariffs_from_dataframe(self.ftl_tariffs_database)
 
         destinations_list = list(self.hub_demand_database['HUB COFOR'].unique()) + [self.plant.cofor]
@@ -254,7 +253,6 @@ class BaselineBuilder:
 
         hub_demand_for_region = self.hub_demand_database[
             self.hub_demand_database['SHIPPER SOURCING REGION'] == region]
-        hub_demand_for_region.to_csv(f'hub_demand_debug_{region}.csv', sep=';')
 
         # Creating Hub network objects
         hub_sellers = SellerRepository(hub_demand_for_region).get_by_shipper()
