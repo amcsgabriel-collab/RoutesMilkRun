@@ -74,18 +74,11 @@ class RoutePattern:
     def loading_meters(self):
         return sum(shipper.loading_meters * allocation for shipper, allocation in self.shipper_allocation.items())
 
-    @property
-    def has_over_150_km_deviation(self):
-        if self.deviation is None:
-            raise DeviationNotCalculatedError()
-        return self.deviation > 150
-
     def reset_allocation(self):
         for shipper in self.shipper_allocation.keys():
             self.shipper_allocation[shipper] = 1
 
     def order_shippers(self, distance_function):
-
         self.starting_point = max(
             self.shippers,
             key=lambda p: distance_function(p.coordinates, self.plant.coordinates)
@@ -104,7 +97,6 @@ class RoutePattern:
         }
 
     def calculate_deviation(self, distance_function):
-
         self.deviation = 0
 
         if self.count_of_stops > 1:

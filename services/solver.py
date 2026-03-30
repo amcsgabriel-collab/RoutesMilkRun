@@ -23,10 +23,10 @@ import pulp
 from domain.domain_algorithms import make_haversine_cache
 from domain.data_structures import Plant
 from domain.exceptions import NonOptimalSolutionError
-from domain.operational_route import OperationalRoute
 from domain.project import Project
+from domain.routes.direct_route import DirectRoute
 from domain.shipper import Shipper
-from domain.route_pattern import RoutePattern
+from domain.routes.route_pattern import RoutePattern
 from services.route_pattern_creation_iterator import iterate_creation_of_route_patterns
 from services.tariff_service import TariffService
 from services.vehicle_permutation_service import VehiclePermutationService
@@ -48,9 +48,7 @@ class Solver:
     - Merge optimized routes with locked routes into the final solution
 
     Attributes:
-        project: Full project state containing context, metadata, and scenarios.
-        current_region: Region currently selected in project metadata.
-        current_scenario: Scenario currently selected in project metadata.
+        project: Project object that contains all project context data.
         filtered_shippers: Direct shippers not already covered by locked routes.
         ftl_shippers: Subset of filtered shippers that must be served by FTL.
         mr_shippers: Subset of filtered shippers eligible for milk run solving.
@@ -60,31 +58,36 @@ class Solver:
 
     def __init__(
             self,
-            project: Project
+            project: Project,
     ):
         self.project = project
-        self.current_region = self.project.context.regions[self.project.meta.current_region]
-        self.current_scenario = self.current_region.scenarios[self.project.meta.current_scenario]
         locked_shippers = {
             shipper
-            for route in self.current_scenario.locked_routes
+            for route in project.current_scenario.locked_routes
             for shipper in route.pattern.shippers
         }
         self.filtered_shippers = {
             shipper
-            for shipper in self.current_scenario.direct_shippers.values()
+            for shipper in project.current_scenario.direct_shippers.values()
             if shipper not in locked_shippers
                and shipper.has_demand
         }
         self.ftl_shippers = {s for s in self.filtered_shippers if s.is_ftl_exclusive_shipper}
         self.mr_shippers = {s for s in self.filtered_shippers if not s.is_ftl_exclusive_shipper}
-        self.ftl_solver = None
-        self.mr_solver = None
-        self.solution_routes = set(self.current_scenario.locked_routes.copy())
-        self.blocked_patterns = {r.pattern for r in self.current_scenario.blocked_routes}
+        self.solution_routes = set(project.current_scenario.locked_routes.copy())
+        self.blocked_patterns = {r.pattern for r in project.current_scenario.blocked_routes}
+        self.vehicle_permutation_service = VehiclePermutationService(project.context.vehicles)
 
-        self.vehicle_permutation_service = VehiclePermutationService(self.project.context.vehicles)
-        self.tariffs_service = TariffService(self.project.context.ftl_tariffs)
+        self.mr_solver: MilkRunSolver = None
+        self.ftl_solver: FtlSolver = None
+
+    @property
+    def tariffs_service(self):
+        return self.project.context.tariffs_service
+
+    @property
+    def plant(self):
+        return self.project.context.plant
 
     def run(self):
         """
@@ -109,8 +112,8 @@ class Solver:
         """
         self.mr_solver = MilkRunSolver(
             shippers=self.mr_shippers,
-            existing_routes=self.current_region.scenarios["AS-IS"].routes,
-            plant=self.project.context.plant,
+            existing_routes=self.project.current_region.scenarios["AS-IS"].routes,
+            plant=self.plant,
             vehicle_permutation_service=self.vehicle_permutation_service,
             tariffs_service=self.tariffs_service,
             blocked_patterns=self.blocked_patterns
@@ -128,10 +131,10 @@ class Solver:
         """
         self.ftl_solver = FtlSolver(
             shippers=self.ftl_shippers,
-            plant=self.project.context.plant,
+            plant=self.plant,
             vehicle_permutation_service=self.vehicle_permutation_service,
             tariffs_service=self.tariffs_service,
-            existing_routes=self.current_region.scenarios["AS-IS"].routes
+            existing_routes=self.project.current_region.scenarios["AS-IS"].routes
         )
         self.ftl_solver.build()
         self.ftl_solver.solve()
@@ -173,12 +176,12 @@ class MilkRunSolver:
         - Only shippers within the same carrier group may be grouped together.
     """
     patterns: set[RoutePattern]
-    routes: set[OperationalRoute]
+    routes: set[DirectRoute]
 
     def __init__(
             self,
             shippers: set[Shipper],
-            existing_routes: set[OperationalRoute],
+            existing_routes: set[DirectRoute],
             plant: Plant,
             vehicle_permutation_service: VehiclePermutationService,
             tariffs_service: TariffService,
@@ -222,8 +225,8 @@ class MilkRunSolver:
         self.generate_route_patterns()
         self.apply_ordering_to_route_patterns()
         self.remove_high_deviation_route_patterns()
-        self.routes = self.vehicle_permutation_service.permutate(self.patterns)
-        new_routes = self.tariffs_service.assign_ftl(self.routes)
+        new_routes = self.vehicle_permutation_service.permutate(self.patterns)
+        self.tariffs_service.assign_ftl_mr_routes(new_routes)
         self.routes = {r for r in new_routes if r.total_cost > 0}
         self.build_model()
 
@@ -275,7 +278,7 @@ class MilkRunSolver:
         This acts as a pruning step before vehicle permutation and optimization,
         reducing model size and excluding operationally undesirable patterns.
         """
-        patterns_to_remove = {p for p in self.patterns if p.has_over_150_km_deviation}
+        patterns_to_remove = {p for p in self.patterns if p.deviation > 150}
         for pattern in patterns_to_remove:
             self.patterns.remove(pattern)
 
@@ -352,7 +355,7 @@ class FtlSolver:
             plant: Plant,
             vehicle_permutation_service: VehiclePermutationService,
             tariffs_service: TariffService,
-            existing_routes: set[OperationalRoute]
+            existing_routes: set[DirectRoute]
     ):
         self.shippers = shippers
         self.plant = plant
@@ -370,8 +373,8 @@ class FtlSolver:
         Generate and price candidate FTL routes for the input shippers.
         """
         self.build_patterns()
-        self.routes = self.vehicle_permutation_service.permutate(self.patterns)
-        new_routes = self.tariffs_service.assign_ftl(self.routes)
+        new_routes = self.vehicle_permutation_service.permutate(self.patterns)
+        self.tariffs_service.assign_ftl_mr_routes(new_routes)
         self.routes = {r for r in new_routes if r.total_cost > 0}
 
     def solve(self):

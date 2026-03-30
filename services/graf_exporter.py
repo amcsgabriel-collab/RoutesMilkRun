@@ -1,12 +1,12 @@
 import pandas as pd
 
 from domain.hub import Hub
-from domain.operational_route import OperationalRoute
+from domain.routes.direct_route import DirectRoute
 
 
 def export_graf(
         path: str,
-        scenario_routes: set[OperationalRoute],
+        scenario_routes: set[DirectRoute],
         scenario_hubs: set[Hub]
 ) -> None:
 

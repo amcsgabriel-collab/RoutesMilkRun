@@ -3,10 +3,9 @@ import pandas as pd
 
 from domain.data_structures import Plant
 from domain.hub import Hub
-from domain.operational_route import OperationalRoute
+from domain.routes.direct_route import DirectRoute
 from domain.project import Scenario
 from domain.shipper import Shipper
-from paths import get_helper_path
 
 # Variables & Constants
 PLANT_COLOR = "#CE2900"
@@ -102,7 +101,7 @@ def plot_hub_points(shippers: list[Shipper], feature_group):
         ).add_to(feature_group)
 
 
-def plot_routes(routes: list[OperationalRoute], feature_group):
+def plot_routes(routes: list[DirectRoute], feature_group):
     for route in routes:
         coordinates = [
             shipper.coordinates
@@ -200,7 +199,7 @@ def plot_hubs(hubs: list[Hub], feature_group):
         ).add_to(feature_group)
 
 
-def fit_map_to_routes(map_object, plant: Plant, routes: list[OperationalRoute], padding=(30, 30)):
+def fit_map_to_routes(map_object, plant: Plant, routes: list[DirectRoute], padding=(30, 30)):
     points = [plant.coordinates]
 
     for route in routes:
@@ -215,7 +214,7 @@ def fit_map_to_routes(map_object, plant: Plant, routes: list[OperationalRoute], 
         map_object.zoom_start = 10
 
 
-def plot_route_map_embedded(scenario: Scenario) -> str:
+def generate_scenario_map_html(scenario: Scenario) -> str:
     m = create_map()
 
     direct_fg = folium.FeatureGroup(name="Direct")

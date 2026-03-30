@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, PropertyMock
 from domain.data_structures import Plant, Vehicle
 from domain.domain_algorithms import make_haversine_cache, get_deviation_bin
 from domain.operational_route import OperationalRoute
-from domain.route_pattern import RoutePattern
+from domain.routes.route_pattern import RoutePattern
 from domain.shipper import Shipper
 from infrastructure.data_loader import DataLoader
 from paths import get_test_path

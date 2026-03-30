@@ -1,10 +1,10 @@
 from domain.data_structures import Vehicle
 from domain.exceptions import MissingVehiclesInHelperFileError
-from domain.operational_route import OperationalRoute
-from domain.route_pattern import RoutePattern
+from domain.routes.direct_route import DirectRoute
+from domain.routes.route_pattern import RoutePattern
 
 
-class OperationalRouteRepository:
+class DirectRouteRepository:
     def __init__(self,
                  patterns_by_vehicle: dict[str, set[RoutePattern]],
                  vehicles: dict[str, Vehicle]
@@ -12,14 +12,14 @@ class OperationalRouteRepository:
         self._patterns_by_vehicle = patterns_by_vehicle
         self._vehicles = vehicles
 
-    def get_all(self) -> set[OperationalRoute]:
+    def get_all(self) -> set[DirectRoute]:
 
         missing_vehicles = set(v for v in self._patterns_by_vehicle.keys()).difference(set(v for v in self._vehicles.keys()))
         if missing_vehicles:
             raise MissingVehiclesInHelperFileError(missing_vehicles)
 
         return {
-            OperationalRoute(
+            DirectRoute(
                 pattern=pattern,
                 vehicle=self._vehicles[vehicle_id]
             )

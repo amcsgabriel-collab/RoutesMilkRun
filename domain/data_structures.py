@@ -63,4 +63,3 @@ class Vehicle:
             "volume": self.volume_capacity,
             "loading_meters": self.loading_meters_capacity,
         }
-

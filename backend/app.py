@@ -11,10 +11,7 @@ from werkzeug.exceptions import HTTPException
 
 from domain.exceptions import NoProjectError, UnsavedScenarioError, NonOptimalSolutionError, ExportingBaselineError, \
     CannotEditBaselineError, InvalidFileTypeError, ShippersWithoutLocationsError
-from repositories.project_repository import ProjectRepository
-from services.baseline_builder import BaselineBuilder
 from services.project_manager import ProjectManager
-from services.solver import Solver
 
 # ----------------------------------------------------
 # APP SETUP
@@ -128,8 +125,7 @@ logging.basicConfig(
 # ----------------------------------------------------
 # Project Manager setup
 
-project_repository = ProjectRepository()
-pm = ProjectManager(project_repository, BaselineBuilder, Solver)
+pm = ProjectManager()
 
 
 # ----------------------------------------------------
@@ -251,14 +247,6 @@ def handle_no_coordinates_shipper(e):
     return error(e), 404
 
 # ----------------------------------------------------
-# Project
-
-def current_project():
-    project = pm.current_project
-    if not project:
-        raise NoProjectError()
-    return project
-
 
 @app.post("/api/project/create")
 @json_endpoint
@@ -278,10 +266,10 @@ def api_load_project(data):
 
 @app.post("/api/project/save")
 def api_save_project():
-    if not current_project().meta.rob_file_path:
+    if not pm.project.meta.rob_file_path:
         return success({'needs_save_as': True})
     pm.save_project()
-    return success(current_project().meta.rob_file_path)
+    return success(pm.project.meta.rob_file_path)
 
 
 @app.post("/api/project/save_as")
@@ -293,7 +281,7 @@ def api_save_project_as(data):
 
 @app.get("/api/project")
 def api_project():
-    return success(current_project().summary)
+    return success(pm.project.summary)
 
 
 # ----------------------------------------------------
@@ -301,14 +289,14 @@ def api_project():
 
 @app.get("/api/regions")
 def api_regions():
-    return success(current_project().regions_list)
+    return success(pm.project.regions_list)
 
 
 @app.put("/api/region")
 @json_endpoint
 @with_pm_lock
 def api_region_select(data):
-    pm.set_current_region(data.get("region"))
+    pm.project.set_current_region(data.get("region"))
     return success()
 
 
@@ -322,7 +310,7 @@ def api_scenarios():
 @json_endpoint
 @with_pm_lock
 def api_scenario_select(data):
-    pm.set_current_scenario(data.get("scenario_name"))
+    pm.project.set_current_scenario(data.get("scenario_name"))
     return success()
 
 
@@ -352,7 +340,7 @@ def api_scenario_delete(data):
 @app.patch("/api/scenario")
 @with_pm_lock
 def api_scenario_save():
-    pm.save_scenario()
+    pm.current_scenario.save()
     return success()
 
 
@@ -384,7 +372,7 @@ def api_hubs():
 
 @app.get("/api/vehicles")
 def api_vehicles():
-    vehicles_summary = [vehicle.summary for vehicle in current_project().context.vehicles]
+    vehicles_summary = [vehicle.summary for vehicle in pm.project.context.vehicles]
     return success(vehicles_summary)
 
 
@@ -393,7 +381,7 @@ def api_vehicles():
 
 @app.get("/api/map")
 def api_map():
-    html = pm.current_map_html
+    html = pm.get_map_html()
     return success(html)
 
 
@@ -412,14 +400,14 @@ def api_solve_model():
 
 @app.get("/api/swap_hub/load")
 def api_swap_load():
-    data = pm.get_hub_direct_swap_data()
+    data = pm.get_shippers_cofor_per_network()
     return success(data)
 
 
 @app.post("/api/swap_hub/apply_thresholds_preview")
 @json_endpoint
 def api_swap_apply_thresholds(data):
-    swapped = pm.apply_swap_threshold_preview(data.get("thresholds"))
+    swapped = pm.preview_swap_threshold(data.get("thresholds"))
     return success(swapped)
 
 
@@ -427,10 +415,10 @@ def api_swap_apply_thresholds(data):
 @json_endpoint
 @with_pm_lock
 def api_swap_hub(data):
-    shippers = pm.swap_hub_direct(
-        data.get("direct_cofors_to_add"),
-        data.get("hub_cofors_to_add"))
-    return success(shippers)
+    pm.move_hub_to_direct(data.get("direct_cofors_to_add")),
+    shippers_without_hub = pm.move_direct_to_hub(data.get("hub_cofors_to_add"))
+    pm.project.refresh_tariffs_scenario_hubs()
+    return success(shippers_without_hub)
 
 
 @app.get("/api/swap_hub/available_hubs")
@@ -443,7 +431,13 @@ def api_swap_available_hubs():
 @json_endpoint
 @with_pm_lock
 def api_swap_resolve(data):
-    pm.resolve_swap_hub_direct(data.get("decisions"))
+    for decision in data.get("decisions"):
+        if decision.get("action") == "confirm_manual_swap":
+            shipper_cofor = decision.get("shipper")
+            hub_cofor = decision.get("selectedHub")
+
+            shipper = pm.current_scenario.direct_shippers()[shipper_cofor]
+            pm.current_scenario.move_direct_to_hub(shipper, hub_cofor)
     return success()
 
 
@@ -464,11 +458,11 @@ def _normalize_route_key(route_key):
 @query_endpoint
 def get_lock_block_routes(data):
     mode = data.get("mode")
-    current_routes = pm.current_scenario.refresh_lock_block_available_routes()
-    target_routes = pm.current_scenario.locked_routes if mode == "lock" else pm.current_scenario.blocked_routes
+    current_routes = pm.get_lock_block_available_routes()
+    target_routes = pm.get_locked_routes() if mode == "lock" else pm.get_locked_routes()
     return success({
-        "current_routes": [r.shippers_keyed_summary for r in current_routes],
-        "target_routes": [r.shippers_keyed_summary for r in target_routes],
+        "current_routes": current_routes,
+        "target_routes": target_routes,
     })
 
 
@@ -476,11 +470,17 @@ def get_lock_block_routes(data):
 @json_endpoint
 @with_pm_lock
 def move_lock_block_route(data):
-    pm.lock_block_routes(
-        mode=data.get("mode"),
-        from_side=data.get("from"),
-        shippers_key=_normalize_route_key(data.get("route_key"))
-    )
+    from_side = data.get("from_side")
+    mode = data.get("mode")
+    shippers_key = _normalize_route_key(data.get("route_key"))
+    action_map = {
+            ("left", "lock"): pm.lock_route,
+            ("left", "block"): pm.block_route,
+            ("right", "lock"): pm.unlock_route,
+            ("right", "block"): pm.unblock_route,
+        }
+    action = action_map.get((from_side, mode))
+    action(shippers_key)
     return success()
 
 
@@ -493,7 +493,7 @@ def get_lock_block_suppliers():
 
 @app.get("/api/lock_block/vehicles")
 def api_vehicles_lock_block():
-    vehicles = [vehicle.id for vehicle in current_project().context.vehicles]
+    vehicles = [vehicle.id for vehicle in pm.project.context.vehicles]
     return success(vehicles)
 
 
@@ -501,16 +501,20 @@ def api_vehicles_lock_block():
 @json_endpoint
 @with_pm_lock
 def add_manual_route(data):
-    pm.manual_lock_block_routes(
-        mode=data.get("mode"),
-        shippers_key= _normalize_route_key(data.get("route_key")),
-        vehicle_id=data.get("vehicle_id"))
+    mode = data.get("mode")
+    shippers_key = _normalize_route_key(data.get("route_key"))
+    vehicle_id = data.get("vehicle_id")
+    if mode == "lock":
+        pm.lock_route_manual(shippers_key, vehicle_id)
+    elif mode == "block":
+        pm.block_route_manual(shippers_key, vehicle_id)
+    else:
+        raise KeyError("Mode must be 'lock' or 'block'")
     return success()
 
 
 # ----------------------------------------------------
 # Export solutions
-
 @app.post("/api/export_solution/validate")
 def export_solution_validate():
     pm.request_export_solution()

@@ -1,130 +1,38 @@
-from math import ceil
-
 import pandas as pd
 
-from domain.route_pattern import RoutePattern
 from domain.data_structures import Vehicle
-from domain.exceptions import RouteNotOrderedError, DeviationNotCalculatedError, VehicleCapacityError
+from domain.routes.route import Route
+from domain.routes.route_costing_strategies import TruckBasedCosting
+from domain.routes.route_demand_aggregation_strategies import MilkrunPatternDemand
+from domain.routes.route_pattern import RoutePattern
+from domain.tariff import FtlTariff
 
 
-def _safe_div(numerator, denominator):
-    if denominator is None or denominator == 0:
-        return 0.0
-    return numerator / denominator
-
-
-class OperationalRoute:
-    def __init__(
-            self,
-            pattern: RoutePattern,
-            vehicle: Vehicle,
-    ):
+class DirectRoute(Route):
+    def __init__(self, pattern: RoutePattern, vehicle: Vehicle):
+        super().__init__(
+            vehicle=vehicle,
+            demand=MilkrunPatternDemand(pattern),
+            costing=TruckBasedCosting(),
+        )
         self.pattern = pattern
-        self.vehicle = vehicle
-
-        self.is_new_route = pattern.is_new_pattern
-        self.verify_vehicle_capacity()
-        self.base_cost = 0
-        self.stop_cost = 0
-        self.tariff_source = None
-        self.frequency = 0
-        self.weight_utilization = 0
-        self.volume_utilization = 0
-        self.loading_meters_utilization = 0
-        self.max_utilization = 0
-
-        self.compute_utilization()
+        self.tariff: FtlTariff | None = None
 
     def __hash__(self):
         return hash((self.pattern, self.vehicle))
 
     def __eq__(self, other):
-        return (isinstance(other, OperationalRoute)
+        return (isinstance(other, DirectRoute)
                 and self.pattern == other.pattern
                 and self.vehicle == other.vehicle)
-
-    def tariff_key(self, digits: int = 2):
-        if self.pattern.starting_point is None:
-            raise RouteNotOrderedError()
-        if self.pattern.deviation_bin is None:
-            raise DeviationNotCalculatedError()
-        return (
-            self.pattern.carrier,
-            self.vehicle.id,
-            self.pattern.deviation_bin,
-            self.pattern.starting_point.zip_key(digits),
-            self.pattern.starting_point.cofor
-        )
-
-    @property
-    def route_cost(self):
-        return self.base_cost + self.stop_cost * self.pattern.count_of_stops
-
-    @property
-    def total_cost(self):
-        return self.route_cost * self.frequency
-
-    def verify_vehicle_capacity(self) -> None:
-        if self.vehicle.weight_capacity <= 0 or self.vehicle.volume_capacity <= 0 or self.vehicle.loading_meters_capacity <= 0:
-            raise VehicleCapacityError(f'Vehicle has negative capacity: {self.vehicle.id}')
-
-    def _safe_capacity_ratio(self, demand, capacity):
-        if (
-                demand is None
-                or capacity in (None, 0)
-                or self.pattern.overutilization in (None, 0)
-        ):
-            return 0.0
-
-        adjusted_capacity = capacity * self.pattern.overutilization
-        if adjusted_capacity == 0:
-            return 0.0
-
-        return demand / adjusted_capacity
-
-    def compute_utilization(self):
-
-        ratios = [
-            self._safe_capacity_ratio(self.pattern.weight,
-                                      self.vehicle.weight_capacity),
-
-            self._safe_capacity_ratio(self.pattern.volume,
-                                      self.vehicle.volume_capacity),
-
-            self._safe_capacity_ratio(self.pattern.loading_meters,
-                                      self.vehicle.loading_meters_capacity),
-        ]
-
-        max_ratio = max(ratios)
-        self.frequency = ceil(max_ratio)
-        self.weight_utilization = round(
-            _safe_div(self.pattern.weight,
-                      self.vehicle.weight_capacity * self.frequency),
-            4
-        )
-        self.volume_utilization = round(
-            _safe_div(self.pattern.volume,
-                      self.vehicle.volume_capacity * self.frequency),
-            4
-        )
-        self.loading_meters_utilization = round(
-            _safe_div(self.pattern.loading_meters,
-                      self.vehicle.loading_meters_capacity * self.frequency),
-            4
-        )
-        self.max_utilization = max(
-            self.weight_utilization,
-            self.volume_utilization,
-            self.loading_meters_utilization
-        )
 
     @property
     def summary(self):
         return {
             "name": self.pattern.route_name,
             "vehicle": self.vehicle.id,
-            "base_cost": self.base_cost,
-            "stop_cost": self.stop_cost,
+            "base_cost": self.tariff.base_cost,
+            "stop_cost": self.tariff.stop_cost,
             "weight_utilization": self.weight_utilization,
             "volume_utilization": self.volume_utilization,
             "loading_meters_utilization": self.loading_meters_utilization,
@@ -248,8 +156,8 @@ class OperationalRoute:
                     'Avg. Weight utilization in %': self.weight_utilization if first_route_row else '',
                     'Avg. Volume utilization in %': self.volume_utilization if first_route_row else '',
                     'Max. Utilization in %': self.max_utilization if first_route_row else '',
-                    'Base cost': self.base_cost if first_route_row else '',
-                    'Stop cost': self.stop_cost if first_route_row else '',
+                    'Base cost': self.tariff.base_cost if first_route_row else '',
+                    'Stop cost': self.tariff.stop_cost if first_route_row else '',
                     'Total costs per load': self.route_cost if first_route_row else '',
                     'Total costs per week': self.total_cost if first_route_row else '',
                     '[PERS. COLUMN] Original Network': shipper.original_network

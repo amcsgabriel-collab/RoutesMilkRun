@@ -9,7 +9,7 @@ from domain.hub import Hub
 from domain.hub_route import HubRoute
 from domain.operational_route import OperationalRoute
 from domain.project import Scenario, SourcingRegion, ProjectContext
-from domain.route_pattern import RoutePattern
+from domain.routes.route_pattern import RoutePattern
 from domain.shipper import Shipper
 from infrastructure.data_loader import DataLoader
 from infrastructure.demand_data_transformer import DemandDataTransformer
@@ -18,7 +18,7 @@ from infrastructure.tariffs_transformer import TariffsTransformer
 from paths import get_helper_path
 from repositories.data_structures_repository import SellerRepository, PlantRepository, CarrierRepository
 from repositories.hub_repository import HubRepository
-from repositories.operational_route_repository import OperationalRouteRepository
+from repositories.direct_route_repository import OperationalRouteRepository
 from repositories.route_pattern_repository import RoutePatternRepository
 from repositories.shipper_repository import ShipperRepository
 from repositories.tariffs_repository import ftl_tariffs_from_dataframe, hub_tariffs_from_dataframe

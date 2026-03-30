@@ -1,7 +1,7 @@
 import pandas as pd
 
 from domain.data_structures import Plant
-from domain.route_pattern import RoutePattern
+from domain.routes.route_pattern import RoutePattern
 from domain.shipper import Shipper
 
 
