@@ -145,14 +145,3 @@ class ProjectManager:
             scenario_hubs=self.current_scenario.hubs,
             scenario_routes=self.current_scenario.routes,
         )
-
-
-
-
-    #
-    #
-    #
-    #
-
-    #
-    #

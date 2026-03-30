@@ -6,8 +6,9 @@ import pandas as pd
 from domain.domain_algorithms import make_haversine_cache, get_deviation_bin
 from domain.exceptions import ShippersWithoutLocationsError, MissingTariffsError, CarriersNotInHelperError
 from domain.hub import Hub
-from domain.hub_route import HubRoute
-from domain.operational_route import OperationalRoute
+from domain.routes.first_leg_route import FirstLegRoute
+from domain.routes.linehaul_route import LinehaulRoute
+from domain.routes.direct_route import DirectRoute
 from domain.project import Scenario, SourcingRegion, ProjectContext
 from domain.routes.route_pattern import RoutePattern
 from domain.shipper import Shipper
@@ -18,10 +19,10 @@ from infrastructure.tariffs_transformer import TariffsTransformer
 from paths import get_helper_path
 from repositories.data_structures_repository import SellerRepository, PlantRepository, CarrierRepository
 from repositories.hub_repository import HubRepository
-from repositories.direct_route_repository import OperationalRouteRepository
+from repositories.direct_route_repository import DirectRouteRepository
 from repositories.route_pattern_repository import RoutePatternRepository
 from repositories.shipper_repository import ShipperRepository
-from repositories.tariffs_repository import ftl_tariffs_from_dataframe, hub_tariffs_from_dataframe
+from repositories.tariffs_repository import ftl_tariffs_from_dataframe, ltl_tariffs_from_dataframe
 from repositories.vehicle_repository import VehicleRepository
 from services.tariff_service import TariffService
 
@@ -68,52 +69,52 @@ def verify_total_volume(route_patterns: list["RoutePattern"], shippers: list["Sh
                 print(f"  Route: {pattern.route_name} | Allocation: {share:.6f}")
 
 
-def validate_ftl_missing_tariffs(routes: set[OperationalRoute]) -> None:
+def validate_ftl_missing_tariffs(routes: set[DirectRoute]) -> None:
     missing = [
-        {"zip_key": route.pattern.starting_point.zip_key(5),
-         "cofor": route.pattern.starting_point.cofor,
-         "carrier": route.pattern.carrier,
+        {"zip_key": route.demand.zip_key(5),
+         "cofor": route.demand.starting_point.cofor,
+         "carrier": route.demand.carrier.group,
          "vehicle": route.vehicle.id,
-         "deviation_bucket": route.pattern.deviation_bin,
+         "deviation_bucket": route.demand.deviation_bin,
          } for route in routes if route.tariff_source == 'Missing'
     ]
     if missing:
         raise MissingTariffsError(tariff_type='ftl', missing_tariffs=missing)
 
-def validate_ltl_missing_tariffs(routes: set[HubRoute]) -> None:
+def validate_ltl_missing_tariffs(routes: set[FirstLegRoute]) -> None:
     missing = [
-        {"zip_key": route.shipper.zip_key(5),
-         "cofor": route.shipper.cofor,
-         "carrier": route.shipper.carrier.group,
-         "destination": route.destination_hub_cofor,
-         "weight_bracket": route.weight_bracket_ltl,
+        {"zip_key": route.demand.zip_key(5),
+         "cofor": route.demand.starting_point.cofor,
+         "carrier": route.demand.carrier.group,
+         "destination": route.hub.cofor,
+         "weight_bracket": route.costing.weight_bracket_ltl,
          } for route in routes if route.tariff_source == 'Missing'
     ]
     if missing:
         raise MissingTariffsError(tariff_type='ltl', missing_tariffs=missing)
 
-def validate_hub_missing_tariffs(routes: set[HubRoute]) -> None:
-    missing = [
-        {"zip_key": route.shipper.zip_key(5),
-         "cofor": route.shipper.cofor,
-         "carrier": route.shipper.carrier.group,
-         "destination": route.destination_hub_cofor,
-         "weight_bracket": route.weight_bracket_ltl,
-         } for route in routes if route.tariff_source == 'Missing'
-    ]
-    if missing:
-        raise MissingTariffsError(tariff_type='hub', missing_tariffs=missing)
+# def validate_hub_missing_tariffs(routes: set[FirstLegRoute]) -> None:
+#     missing = [
+#         {"zip_key": route.shipper.zip_key(5),
+#          "cofor": route.shipper.cofor,
+#          "carrier": route.shipper.carrier.group,
+#          "destination": route.destination_hub_cofor,
+#          "weight_bracket": route.weight_bracket_ltl,
+#          } for route in routes if route.tariff_source == 'Missing'
+#     ]
+#     if missing:
+#         raise MissingTariffsError(tariff_type='hub', missing_tariffs=missing)
 
-def validate_linehaul_missing_tariffs(hub: Hub) -> None:
+def validate_linehaul_missing_tariffs(route: LinehaulRoute) -> None:
     missing = [
         {
-            "zip_key": hub.zip_key(2),
-            "cofor": hub.cofor,
-            "carrier": hub.linehaul_carrier.group,
-            "vehicle": hub.linehaul_vehicle.id,
-            "deviation_bucket": get_deviation_bin(35)[0],
+            "zip_key": route.demand.zip_key(2),
+            "cofor": route.demand.starting_point.cofor,
+            "carrier": route.demand.carrier.group,
+            "vehicle": route.vehicle.id,
+            "deviation_bucket": route.demand.deviation_bin,
         }
-    ] if hub.linehaul_tariff_source == "Missing" else []
+    ] if route.tariff_source == "Missing" else []
     if missing:
         raise MissingTariffsError(tariff_type='linehaul', missing_tariffs=missing)
 
@@ -318,7 +319,7 @@ class BaselineBuilder:
             shippers=[s for s in direct_shippers_by_cofor.values()]
         )
 
-        operational_routes = OperationalRouteRepository(
+        operational_routes = DirectRouteRepository(
             patterns_by_vehicle=route_patterns_by_vehicle,
             vehicles=self.vehicles,
         ).get_all()

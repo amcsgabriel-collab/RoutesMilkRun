@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6209f30f-32f5-49da-b9ce-970dbb10e034" name="Changes" comment="" />
+    <list default="true" id="6209f30f-32f5-49da-b9ce-970dbb10e034" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/baseline_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/baseline_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/project_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/project_manager.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -80,7 +84,7 @@
     "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
     "database.data.extractors.current.export.id": "Semicolon-separated_id",
     "database.data.extractors.current.id": "Semicolon-separated_id",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "refactoring-cleanup",
     "junie.onboarding.icon.badge.shown": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
