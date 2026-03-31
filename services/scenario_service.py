@@ -3,7 +3,7 @@ from domain.exceptions import CannotEditBaselineError
 
 class ScenarioService:
     def _create_scenario(self, project, template: str = 'AS-IS'):
-        scenarios = project.scenarios_list
+        scenarios = project.current_region.scenarios
         if template not in scenarios:
             raise KeyError(f"Scenario '{template}' does not exist.")
         new_scenario = scenarios[template].copy()
@@ -13,7 +13,7 @@ class ScenarioService:
         new_scenario.name = new_name
         new_scenario.is_baseline = False
         scenarios[new_name] = new_scenario
-        project.set_scenario(new_scenario)
+        project.set_current_scenario(new_name)
 
     def add_scenario(self, project):
         self._create_scenario(project, 'AS-IS')

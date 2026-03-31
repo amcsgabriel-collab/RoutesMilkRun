@@ -9,6 +9,7 @@ from domain.shipper import Shipper
 
 class Hub:
     first_leg_routes: set[FirstLegRoute] = set()
+
     def __init__(
             self,
             route: str,
@@ -51,6 +52,9 @@ class Hub:
     def total_cost(self):
         return self.pre_carriage_costs + self.linehaul_route.total_cost
 
+    def zip_key(self, digits):
+        return self.country + self.zip_code[:digits]
+
     @property
     def summary(self):
         return {
@@ -82,7 +86,7 @@ class Hub:
                 carrier=self.first_leg_carrier,
                 vehicle=self.first_leg_vehicle,
                 hub=self
-                ) for shipper in self.shippers
+            ) for shipper in self.shippers
         }
 
     def generate_route_name(self):

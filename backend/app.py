@@ -415,10 +415,13 @@ def api_swap_apply_thresholds(data):
 @json_endpoint
 @with_pm_lock
 def api_swap_hub(data):
-    pm.move_hub_to_direct(data.get("direct_cofors_to_add")),
+    shippers_without_tariff = pm.move_hub_to_direct(data.get("direct_cofors_to_add")),
     shippers_without_hub = pm.move_direct_to_hub(data.get("hub_cofors_to_add"))
     pm.project.refresh_tariffs_scenario_hubs()
-    return success(shippers_without_hub)
+    return success(
+        {'shippers_without_hub': shippers_without_hub,
+         'shippers_without_tariff': shippers_without_tariff}
+    )
 
 
 @app.get("/api/swap_hub/available_hubs")
@@ -435,9 +438,7 @@ def api_swap_resolve(data):
         if decision.get("action") == "confirm_manual_swap":
             shipper_cofor = decision.get("shipper")
             hub_cofor = decision.get("selectedHub")
-
-            shipper = pm.current_scenario.direct_shippers()[shipper_cofor]
-            pm.current_scenario.move_direct_to_hub(shipper, hub_cofor)
+            pm.manual_move_direct_to_hub(shipper_cofor, hub_cofor)
     return success()
 
 

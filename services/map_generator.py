@@ -51,7 +51,8 @@ def plot_direct_points(shippers: list[Shipper], feature_group):
     for shipper in shippers:
         tooltip = folium.Tooltip(
             f"""
-                <b>Shipper COFOR:</b> {shipper.cofor}<br>
+                <b>Name:</b> {shipper.name}<br>
+                <b>COFOR:</b> {shipper.cofor}<br>
                 <b>Carrier:</b> {shipper.carrier.group}<br>
                 <b>Weight Demand:</b> {shipper.weight:,.2f}<br>
                 <b>Volume Demand:</b> {shipper.volume:,.2f}<br>
@@ -78,7 +79,8 @@ def plot_hub_points(shippers: list[Shipper], feature_group):
     for shipper in shippers:
         tooltip = folium.Tooltip(
             f"""
-                <b>Shipper COFOR:</b> {shipper.cofor}<br>
+                <b>Name:</b> {shipper.name}<br>
+                <b>COFOR:</b> {shipper.cofor}<br>
                 <b>Carrier:</b> {shipper.carrier.group}<br>
                 <b>Weight Demand:</b> {shipper.weight:,.2f}<br>
                 <b>Volume Demand:</b> {shipper.volume:,.2f}<br>
@@ -122,7 +124,7 @@ def plot_routes(routes: list[DirectRoute], feature_group):
                 <b>Route:</b> {route.pattern.route_name}<br>
                 <b>Vehicle:</b> {route.vehicle.id}<br>
                 <b>Frequency:</b> {route.frequency} T<br>
-                <b>Utilization:</b> {route.max_utilization:.2%}<br>
+                <b>Utilization:</b> {route.max_utilization:.2f}%<br>
                 <b>Carrier:</b> {route.pattern.carrier}<br>
                 <b>Points Attended:</b> {points}<br>
                 """,
@@ -146,6 +148,11 @@ def plot_hubs(hubs: list[Hub], feature_group):
                 <b>Linehaul Leg:</b><br>
                 <b>Hub COFOR:</b> {hub.cofor}<br>
                 <b>Hub Name:</b> {hub.name}<br>
+                <b>Frequency:</b> {hub.linehaul_route.frequency} T<br>
+                <b>Utilization:</b> {hub.linehaul_route.max_utilization:.2f}%<br>
+                <b>Weight:</b> {hub.linehaul_route.weight:.2f}<br>
+                <b>Volume:</b> {hub.linehaul_route.volume:.2f}<br>
+                <b>Loading Meters:</b> {hub.linehaul_route.loading_meters:.2f}<br>
                 """,
             sticky=True
         )
@@ -158,18 +165,22 @@ def plot_hubs(hubs: list[Hub], feature_group):
         ).add_to(feature_group)
 
         # Adding HUB First leg
-        for shipper in hub.shippers:
+        for route in hub.first_leg_routes:
             tooltip = folium.Tooltip(
                 f"""
                     <b>First Leg:</b><br>
-                    <b>Shipper COFOR:</b> {shipper.cofor}<br>
-                    <b>Shipper Name:</b> {shipper.name}<br>
+                    <b>Shipper COFOR:</b> {route.shipper.cofor}<br>
+                    <b>Shipper Name:</b> {route.shipper.name}<br>
+                    <b>Frequency:</b> {route.frequency} T<br>
+                    <b>Weight:</b> {route.weight:.2f}<br>
+                    <b>Volume:</b> {route.volume:.2f}<br>
+                    <b>Chargeable Weight:</b> {route.costing.chargeable_weight(route):.2f}<br>
                     """,
                 sticky=True
             )
-            color = HUB_ORIGINAL_COLOR if shipper.original_network == 'hub' else HUB_NEW_COLOR
+            color = HUB_ORIGINAL_COLOR if route.shipper.original_network == 'hub' else HUB_NEW_COLOR
             folium.PolyLine(
-                locations=[shipper.coordinates, hub.coordinates],
+                locations=[route.shipper.coordinates, hub.coordinates],
                 tooltip=tooltip,
                 weight=1.5,
                 opacity=0.5,

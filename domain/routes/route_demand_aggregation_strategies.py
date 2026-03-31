@@ -1,11 +1,10 @@
 from domain.data_structures import Plant, Carrier
-from domain.hub import Hub
 from domain.routes.route_pattern import RoutePattern
 from domain.shipper import Shipper
 
 
 class HubAggregateDemand:
-    def __init__(self, hub: Hub):
+    def __init__(self, hub):
         self.hub = hub
 
     @property
@@ -37,6 +36,10 @@ class HubAggregateDemand:
         return 35
 
     @property
+    def count_of_stops(self):
+        return 0
+
+    @property
     def overutilization(self):
         return 1.0
 
@@ -59,7 +62,7 @@ class MilkrunPatternDemand:
 
     @property
     def carrier(self):
-        return self.pattern.carrier
+        return self.starting_point.carrier
 
     @property
     def plant(self):
@@ -115,6 +118,4 @@ class ShipperDemand:
     @property
     def overutilization(self):
         return 1.0
-
-
 

@@ -1,96 +1,161 @@
 import pandas as pd
 
-from settings import TARIFFS_COLUMNS_DIRECT, TARIFFS_COLUMNS_HUB, TARIFFS_COLUMNS_LTL
+TARIFFS_COLUMNS_DIRECT = [
+    {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
+    {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
+    {'raw': 'Singletrip', 'final': 'ST', 'dtype': 'float32'},
+    {'raw': 'Roundtrip', 'final': 'RT', 'dtype': 'float32'},
+    {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
+    {'raw': 'Small (0-30km)', 'final': 'Small (0-30km)', 'dtype': 'float32'},
+    {'raw': 'Low (30-50 km)', 'final': 'Low (30-50 km)', 'dtype': 'float32'},
+    {'raw': 'Medium (50-100km)', 'final': 'Medium (50-100km)', 'dtype': 'float32'},
+    {'raw': 'High (100-150km)', 'final': 'High (100-150km)', 'dtype': 'float32'},
+    {'raw': '>150km', 'final': '>150km', 'dtype': 'float32'},
+]
+
+TARIFFS_COLUMNS_LTL = [
+    {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
+    {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
+    {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
+    {'raw': 'Price_min', 'final': 'Min Price', 'dtype': 'float32'},
+    {'raw': 'Price_max', 'final': 'Max Price', 'dtype': 'float32'},
+    {'raw': '<=200_LTL', 'final': '<=200_LTL', 'dtype': 'float32'},
+    {'raw': '<=600_LTL', 'final': '<=600_LTL', 'dtype': 'float32'},
+    {'raw': '<=1000_LTL', 'final': '<=1000_LTL', 'dtype': 'float32'},
+    {'raw': '<=2000_LTL', 'final': '<=2000_LTL', 'dtype': 'float32'},
+    {'raw': '<=4000_LTL', 'final': '<=4000_LTL', 'dtype': 'float32'},
+    {'raw': '<=10000_LTL', 'final': '<=10000_LTL', 'dtype': 'float32'},
+    {'raw': '<=15000_LTL', 'final': '<=15000_LTL', 'dtype': 'float32'},
+    {'raw': '<=20000_LTL', 'final': '<=20000_LTL', 'dtype': 'float32'},
+    {'raw': '<=25000_LTL', 'final': '<=25000_LTL', 'dtype': 'float32'},
+    {'raw': '>25000_LTL', 'final': '>25000_LTL', 'dtype': 'float32'},
+]
+
+TARIFFS_COLUMNS_HUB = [
+    {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
+    {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
+    {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
+    {'raw': 'Price_min', 'final': 'Min Price', 'dtype': 'float32'},
+    {'raw': 'Price_max', 'final': 'Max Price', 'dtype': 'float32'},
+    {'raw': '<=3000_HUB', 'final': '<=3000_HUB', 'dtype': 'float32'},
+    {'raw': '<=5000_HUB', 'final': '<=5000_HUB', 'dtype': 'float32'},
+    {'raw': '<=7000_HUB', 'final': '<=7000_HUB', 'dtype': 'float32'},
+    {'raw': '<=10000_HUB', 'final': '<=10000_HUB', 'dtype': 'float32'},
+    {'raw': '<=15000_HUB', 'final': '<=15000_HUB', 'dtype': 'float32'},
+    {'raw': '<=20000_HUB', 'final': '<=20000_HUB', 'dtype': 'float32'},
+    {'raw': '>20000_HUB', 'final': '>20000_HUB', 'dtype': 'float32'},
+]
+
+HUB_WEIGHT_VARS = [
+    '<=3000_HUB',
+    '<=5000_HUB',
+    '<=7000_HUB',
+    '<=10000_HUB',
+    '<=15000_HUB',
+    '<=20000_HUB',
+    '>20000_HUB'
+]
+
+LTL_WEIGHT_VARS = [
+    '<=200_LTL',
+    '<=600_LTL',
+    '<=1000_LTL',
+    '<=2000_LTL',
+    '<=4000_LTL',
+    '<=10000_LTL',
+    '<=15000_LTL',
+    '<=20000_LTL',
+    '<=25000_LTL',
+    '>25000_LTL'
+]
 
 
 class TariffsTransformer:
-    def __init__(self, tariffs_dataframe):
+    def __init__(
+            self,
+            tariffs_dataframe: pd.DataFrame,
+            plant_cofor: str,
+            hub_cofors: list[str]
+    ):
         self.tariffs_dataframe = tariffs_dataframe
-        self.transformed_tariffs = None
-        self.filtered_tariffs = None
+        self.plant = plant_cofor
+        self.hubs = hub_cofors
 
-    def transform_tariffs(self, tariffs_type, plant_cofor: str = None, hubs: list[str] = None):
-        self.transformed_tariffs = self.tariffs_dataframe.copy()
-        self.filter_itms_mode(tariffs_type)
-        self.filter_relevant_columns(tariffs_type)
-        self.rename_tariffs_columns(tariffs_type)
-        self.split_tariffs_key()
-        self.filter_tariffs(tariffs_type, hubs=hubs, plant_cofor=plant_cofor)
+    def get_transformed_tariffs(self, tariffs_type: str) -> pd.DataFrame:
+        tariffs = self.tariffs_dataframe.copy()
+        tariffs = self._filter_itms_mode(tariffs, tariffs_type)
+        tariffs = self._filter_relevant_columns(tariffs, tariffs_type)
+        tariffs = self._rename_tariffs_columns(tariffs, tariffs_type)
+        tariffs = self._split_tariffs_key(tariffs)
+        tariffs = self._filter_tariffs_to_destination(tariffs, tariffs_type)
         if tariffs_type == 'ftl':
-            self.melt_tariffs_deviation_bucket()
-            self.melt_tariffs_trip_type()
-            self.filter_st_only()
-        else:
-            self.melt_tariffs_chargeable_weight(tariffs_type)
-        return self.filtered_tariffs
+            tariffs = self._melt_tariffs_deviation_bucket(tariffs)
+            tariffs = self._melt_tariffs_trip_type(tariffs)
+            return self._filter_single_trip_only(tariffs)
 
-    def filter_itms_mode(self, tariffs_type):
+        return self._melt_tariffs_chargeable_weight(tariffs, tariffs_type)
+
+    @staticmethod
+    def _filter_itms_mode(tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
         itms_mode = "FTL / MR" if tariffs_type == 'ftl' else "LTL / GRP / HUB"
-        self.transformed_tariffs = self.transformed_tariffs[self.transformed_tariffs['iTMS_Mode'] == itms_mode]
+        return tariffs[tariffs['iTMS_Mode'] == itms_mode]
 
-    def filter_relevant_columns(self, tariffs_type):
-        if tariffs_type == 'ftl':
-            source = TARIFFS_COLUMNS_DIRECT
-        elif tariffs_type == 'ltl':
-            source = TARIFFS_COLUMNS_LTL
-        elif tariffs_type == 'hub':
-            source = TARIFFS_COLUMNS_HUB
-        else:
-            raise ValueError(f"Unexpected Tariff Type: {tariffs_type}.")
+    @staticmethod
+    def _get_tariff_columns_config(tariffs_type: str) -> list[dict[str, str]]:
+        if tariffs_type == "ftl":
+            return TARIFFS_COLUMNS_DIRECT
+        if tariffs_type == "ltl":
+            return TARIFFS_COLUMNS_LTL
+        if tariffs_type == "hub":
+            return TARIFFS_COLUMNS_HUB
+        raise ValueError(f"Unexpected Tariff Type: {tariffs_type}.")
 
+    def _filter_relevant_columns(self, tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
+        source = self._get_tariff_columns_config(tariffs_type)
         columns = [c['raw'] for c in source]
-        self.transformed_tariffs = self.transformed_tariffs[columns]
+        return tariffs[columns]
 
-    def rename_tariffs_columns(self, tariffs_type):
-        if tariffs_type == 'ftl':
-            source = TARIFFS_COLUMNS_DIRECT
-        elif tariffs_type == 'ltl':
-            source = TARIFFS_COLUMNS_LTL
-        elif tariffs_type == 'hub':
-            source = TARIFFS_COLUMNS_HUB
-        else:
-            raise ValueError(f"Unexpected Tariff Type: {tariffs_type}.")
-
-        self.transformed_tariffs = self.transformed_tariffs.rename(
+    def _rename_tariffs_columns(self, tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
+        source = self._get_tariff_columns_config(tariffs_type)
+        return tariffs.rename(
             columns={c['raw']: c['final'] for c in source}
         )
 
-    def split_tariffs_key(self):
-
-        parts = self.transformed_tariffs["Tariff Key"].str.split("---")
+    @staticmethod
+    def _split_tariffs_key(tariffs: pd.DataFrame) -> pd.DataFrame:
+        tariffs = tariffs.copy()
+        parts = tariffs["Tariff Key"].str.split("---")
         parts = parts.apply(lambda x: [p.strip() for p in x] if isinstance(x, list) else x)
-
         part_count = parts.str.len()
 
-        self.transformed_tariffs["Carrier Short Name"] = parts.str[0]
-        self.transformed_tariffs["Destination COFOR"] = parts.str[-1]
-        self.transformed_tariffs["Origin Code"] = parts.str[-2]
-
-        self.transformed_tariffs["Means of Transport"] = None
+        tariffs["Carrier Short Name"] = parts.str[0]
+        tariffs["Destination COFOR"] = parts.str[-1]
+        tariffs["Origin Code"] = parts.str[-2]
+        tariffs["Means of Transport"] = None
 
         mask_4 = part_count == 4
         mask_5 = part_count == 5
 
-        self.transformed_tariffs.loc[mask_4, "Means of Transport"] = parts[mask_4].str[1]
-        self.transformed_tariffs.loc[mask_5, "Means of Transport"] = parts[mask_5].str[2]
-
+        tariffs.loc[mask_4, "Means of Transport"] = parts[mask_4].str[1]
+        tariffs.loc[mask_5, "Means of Transport"] = parts[mask_5].str[2]
         invalid = ~part_count.isin([3, 4, 5])
         if invalid.any():
             bad_counts = sorted(part_count[invalid].unique().tolist())
             raise ValueError(f"Unexpected Tariff Key format with parts counts: {bad_counts}")
+        return tariffs.drop(columns=["Tariff Key"])
 
-        self.transformed_tariffs = self.transformed_tariffs.drop(columns=["Tariff Key"])
-
-    def filter_tariffs(self, tariffs_type, plant_cofor=None, hubs=None):
+    def _filter_tariffs_to_destination(self, tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
         if tariffs_type == 'ftl':
-            filter_array = self.transformed_tariffs['Destination COFOR'].eq(plant_cofor)
+            filter_array = tariffs['Destination COFOR'].eq(self.plant)
         else:
-            filter_array = self.transformed_tariffs['Destination COFOR'].isin(hubs)
+            destination_list = self.hubs + [self.plant]
+            filter_array = tariffs['Destination COFOR'].isin(destination_list)
 
-        self.filtered_tariffs = self.transformed_tariffs.loc[filter_array]
+        return tariffs.loc[filter_array]
 
-    def melt_tariffs_deviation_bucket(self):
-        self.filtered_tariffs = self.filtered_tariffs.melt(
+    @staticmethod
+    def _melt_tariffs_deviation_bucket(tariffs: pd.DataFrame) -> pd.DataFrame:
+        return tariffs.melt(
             id_vars=[
                 'Carrier Short Name',
                 'Means of Transport',
@@ -112,8 +177,9 @@ class TariffsTransformer:
             value_name='Stop Cost'
         )
 
-    def melt_tariffs_trip_type(self):
-        self.filtered_tariffs = self.filtered_tariffs.melt(
+    @staticmethod
+    def _melt_tariffs_trip_type(tariffs: pd.DataFrame) -> pd.DataFrame:
+        return tariffs.melt(
             id_vars=[
                 'Carrier Short Name',
                 'Means of Transport',
@@ -132,37 +198,19 @@ class TariffsTransformer:
             value_name='Base Cost'
         )
 
-    def filter_st_only(self):
-        self.filtered_tariffs = self.filtered_tariffs[self.filtered_tariffs['Trip Type'] == 'ST']
+    @staticmethod
+    def _filter_single_trip_only(tariffs: pd.DataFrame) -> pd.DataFrame:
+        return tariffs[tariffs['Trip Type'] == 'ST']
 
-    def melt_tariffs_chargeable_weight(self, tariffs_type: str):
+    @staticmethod
+    def _melt_tariffs_chargeable_weight(tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
         if tariffs_type == 'ltl':
-            value_vars = [
-                '<=200_LTL',
-                '<=600_LTL',
-                '<=1000_LTL',
-                '<=2000_LTL',
-                '<=4000_LTL',
-                '<=10000_LTL',
-                '<=15000_LTL',
-                '<=20000_LTL',
-                '<=25000_LTL',
-                '>25000_LTL'
-            ]
+            value_vars = LTL_WEIGHT_VARS
         elif tariffs_type == 'hub':
-            value_vars = [
-                '<=3000_HUB',
-                '<=5000_HUB',
-                '<=7000_HUB',
-                '<=10000_HUB',
-                '<=15000_HUB',
-                '<=20000_HUB',
-                '>20000_HUB'
-            ]
+            value_vars = HUB_WEIGHT_VARS
         else:
             raise ValueError(f"Unexpected Tariffs type: {tariffs_type.upper()}.")
-
-        self.filtered_tariffs = self.filtered_tariffs.melt(
+        return tariffs.melt(
             id_vars=[
                 'Carrier Short Name',
                 'Means of Transport',

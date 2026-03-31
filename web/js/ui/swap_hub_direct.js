@@ -318,11 +318,18 @@ async function applyThresholds() {
 
 async function confirmSwap() {
     try {
-        const suppliers = await apiPost("/api/swap_hub", {
+        const res = await apiPost("/api/swap_hub", {
             direct_cofors_to_add: Array.from(swapState.moved.hubToDirect),
             hub_cofors_to_add: Array.from(swapState.moved.directToHub),
         });
-        if (suppliers && suppliers.length > 0) {
+
+        const suppliers_wo_tariffs = res.shippers_without_tariff;
+        if (suppliers_wo_tariffs && suppliers_wo_tariffs.length > 0) {
+          alert("Warning: Failed to move following suppliers to direct network due to missing tariffs:\n\n" + suppliers_wo_tariffs.join(", "));
+        }
+
+        const suppliers_wo_hubs = res.shippers_without_hub;
+        if (suppliers_wo_hubs && suppliers_wo_hubs.length > 0) {
           const html = await loadHtml("../views_html/swap_resolve_missing.html");
           openModal(html);
           const availableHubs = await apiGet("/api/swap_hub/available_hubs");

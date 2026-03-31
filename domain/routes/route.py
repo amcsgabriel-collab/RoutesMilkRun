@@ -1,3 +1,4 @@
+import copy
 from math import ceil
 
 from domain.data_structures import Vehicle, Carrier
@@ -21,6 +22,9 @@ class Route:
         self.costing = costing
         self.tariff = None
         self.tariff_source = None
+
+    def copy(self):
+        return copy.deepcopy(self)
 
     def _ratio(self, demand_attr: str, capacity_attr: str, *, use_frequency: bool = False) -> float:
         demand_value = getattr(self.demand, demand_attr)
@@ -87,13 +91,13 @@ class Route:
 
     @property
     def tariff_key_bundle(self):
-        full_key = self.costing.build_tariff_key()
-        return {
-            ("zip", self.costing.build_tariff_key(2)[:4]),
-            ("zip", self.costing.build_tariff_key(3)[:4]),
-            ("zip", self.costing.build_tariff_key(5)[:4]),
-            ("cofor", full_key[:3] + (full_key[4],)),
-        }
+        full_key = self.costing.build_tariff_key(self)
+        return [
+            ("zip", self.costing.build_tariff_key(self, 2)[:4]), # By zip + country, 2 digits only
+            ("zip", self.costing.build_tariff_key(self, 3)[:4]), # By zip + country, 3 digits
+            ("zip", self.costing.build_tariff_key(self, 5)[:4]), # By zip + country, all 5 digits
+            ("cofor", full_key[:3] + (full_key[4],)), # Finally, by COFOR.
+        ]
 
     @property
     def route_cost(self):

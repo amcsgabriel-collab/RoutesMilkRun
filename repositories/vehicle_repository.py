@@ -12,11 +12,11 @@ class VehicleRepository:
 
     def extract_vehicles(self) -> dict[str, Vehicle]:
         return {
-            row['id']:
+            row['Name']:
             Vehicle(
-                id=row['id'],
-                weight_capacity=row['weight'],
-                volume_capacity=row['volume'],
-                loading_meters_capacity=row['loading meters'],
+                id=row['Name'],
+                weight_capacity=row['Max weight'],
+                volume_capacity=row['Max volume'],
+                loading_meters_capacity=row['Max Ldm'],
             )  for _, row in self.vehicles_df.iterrows()
         }

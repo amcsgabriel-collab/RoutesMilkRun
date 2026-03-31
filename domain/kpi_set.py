@@ -12,7 +12,7 @@ class KPISet:
 
     @property
     def utilization(self) -> float:
-        return (self.utilization_numerator / self.trucks * 100) if self.trucks else 0.0
+        return (self.utilization_numerator / self.trucks) if self.trucks else 0.0
 
     @property
     def euro_per_truck(self) -> float:

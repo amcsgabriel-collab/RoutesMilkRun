@@ -3,7 +3,7 @@ from typing import Optional, Callable
 
 import pandas as pd
 
-from domain.domain_algorithms import make_haversine_cache, get_deviation_bin
+from domain.domain_algorithms import make_haversine_cache
 from domain.exceptions import ShippersWithoutLocationsError, MissingTariffsError, CarriersNotInHelperError
 from domain.hub import Hub
 from domain.routes.first_leg_route import FirstLegRoute
@@ -71,7 +71,7 @@ def verify_total_volume(route_patterns: list["RoutePattern"], shippers: list["Sh
 
 def validate_ftl_missing_tariffs(routes: set[DirectRoute]) -> None:
     missing = [
-        {"zip_key": route.demand.zip_key(5),
+        {"zip_key": route.demand.starting_point.zip_key(5),
          "cofor": route.demand.starting_point.cofor,
          "carrier": route.demand.carrier.group,
          "vehicle": route.vehicle.id,
@@ -81,34 +81,24 @@ def validate_ftl_missing_tariffs(routes: set[DirectRoute]) -> None:
     if missing:
         raise MissingTariffsError(tariff_type='ftl', missing_tariffs=missing)
 
+
 def validate_ltl_missing_tariffs(routes: set[FirstLegRoute]) -> None:
     missing = [
-        {"zip_key": route.demand.zip_key(5),
+        {"zip_key": route.demand.starting_point.zip_key(5),
          "cofor": route.demand.starting_point.cofor,
          "carrier": route.demand.carrier.group,
-         "destination": route.hub.cofor,
-         "weight_bracket": route.costing.weight_bracket_ltl,
+         "destination": route.destination,
+         "weight_bracket": route.costing.weight_bracket_ltl(route),
          } for route in routes if route.tariff_source == 'Missing'
     ]
     if missing:
         raise MissingTariffsError(tariff_type='ltl', missing_tariffs=missing)
 
-# def validate_hub_missing_tariffs(routes: set[FirstLegRoute]) -> None:
-#     missing = [
-#         {"zip_key": route.shipper.zip_key(5),
-#          "cofor": route.shipper.cofor,
-#          "carrier": route.shipper.carrier.group,
-#          "destination": route.destination_hub_cofor,
-#          "weight_bracket": route.weight_bracket_ltl,
-#          } for route in routes if route.tariff_source == 'Missing'
-#     ]
-#     if missing:
-#         raise MissingTariffsError(tariff_type='hub', missing_tariffs=missing)
 
 def validate_linehaul_missing_tariffs(route: LinehaulRoute) -> None:
     missing = [
         {
-            "zip_key": route.demand.zip_key(2),
+            "zip_key": route.demand.starting_point.zip_key(2),
             "cofor": route.demand.starting_point.cofor,
             "carrier": route.demand.carrier.group,
             "vehicle": route.vehicle.id,
@@ -143,9 +133,8 @@ class BaselineBuilder:
         self.vehicles = None
         self.as_is_scenario = None
 
-        self.operational_routes = None
-        self.ftl_tariffs = {}
-        self.ltl_tariffs = {}
+        self.direct_routes = None
+        self.tariffs_service: TariffService | None = None
 
     def _log(self, msg: str):
         if self.logger:
@@ -153,45 +142,44 @@ class BaselineBuilder:
 
     def build_context(self):
         self._log('Loading Helper Data...')
-        self.load_helper_data()
+        self._load_helper_data()
         self._log('Loading GRAF Data...')
-        self.load_graf_data()
+        self._load_graf_data()
         self._log('Preparing GRAF demand data...')
-        self.transform_graf_demand_data()
+        self._transform_graf_demand_data()
         self._log('Creating domain objects...')
-        self.create_general_domain_objects()
+        self._create_general_domain_objects()
         self._log('Preparing Tariffs...')
-        self.create_tariffs()
+        self._create_tariffs()
         self._log('Preparing Sourcing Regions...')
         regions = {
-            region: self.create_region_domain_objects(region)
+            region: self._create_region_baseline(region)
             for region in self.direct_demand_database['SHIPPER SOURCING REGION'].unique()
         }
-        self._log('Creating Project Context container...')
+        self._log('Creating Project Context...')
         return ProjectContext(
             plant=self.plant,
             vehicles=[v for v in self.vehicles.values()],
-            ftl_tariffs=self.ftl_tariffs,
-            ltl_tariffs=self.ltl_tariffs,
+            tariffs_service=self.tariffs_service,
             regions=regions
         )
 
-    def load_graf_data(self):
+    def _load_graf_data(self):
         self.direct_demand_database = self.graf_loader.load_demand_database('Direct')
         self.hub_demand_database = self.graf_loader.load_demand_database('Hub')
         self.tariffs_database = self.graf_loader.load_tariffs_database()
         self.carrier_helper = self.graf_loader.load_carrier_helper()
         self.plant_name_helper = self.graf_loader.load_plant_name_helper()
+        self.vehicles_database = self.graf_loader.load_vehicles()
 
-    def load_helper_data(self):
-        self.vehicles_database = self.data_loader.load_csv('vehicles')
+    def _load_helper_data(self):
         self.locations_database = self.data_loader.load_excel(
             'locations',
             'Locations',
             ['Key', 'Latitude', 'Longitude', 'ZIP Code', 'Country']
         )
 
-    def transform_graf_demand_data(self):
+    def _transform_graf_demand_data(self):
         self.direct_demand_database = DemandDataTransformer(
             self.direct_demand_database,
             self.carrier_helper,
@@ -215,80 +203,98 @@ class BaselineBuilder:
         if not all_carriers.issubset(carriers_in_helper):
             raise CarriersNotInHelperError(all_carriers.difference(carriers_in_helper))
 
-        #TODO: Implement vehicle check to guarantee all missing vehicles get mapped.
+        # TODO: Implement vehicle check to guarantee all missing vehicles get mapped.
 
-
-    def create_general_domain_objects(self):
+    def _create_general_domain_objects(self) -> None:
         self.plant = PlantRepository(self.direct_demand_database).get_plant()
         self.vehicles = VehicleRepository(self.vehicles_database).extract_vehicles()
 
-    def create_tariffs(self):
-        self.ftl_tariffs_database = TariffsTransformer(self.tariffs_database).transform_tariffs('ftl', plant_cofor=self.plant.cofor)
-        self.ftl_tariffs = ftl_tariffs_from_dataframe(self.ftl_tariffs_database)
-
-        destinations_list = list(self.hub_demand_database['HUB COFOR'].unique()) + [self.plant.cofor]
-        self.ltl_tariffs_database = TariffsTransformer(self.tariffs_database).transform_tariffs('ltl', hubs=destinations_list)
-        self.ltl_tariffs = hub_tariffs_from_dataframe(self.ltl_tariffs_database)
-
-    def create_region_domain_objects(self, region):
-        hub_shippers_by_cofor, hubs = self.create_hub_domain_objects(region)
-        direct_shippers_by_cofor, operational_routes = self.create_direct_domain_objects(region)
-
-        as_is_scenario = Scenario(
-            name='AS-IS',
-            routes=operational_routes,
-            hubs=set(hubs),
-            hub_shippers=hub_shippers_by_cofor,
-            direct_shippers=direct_shippers_by_cofor
+    def _create_tariffs(self) -> None:
+        hub_cofors = list(self.hub_demand_database['HUB COFOR'].unique())
+        transformer = TariffsTransformer(
+            self.tariffs_database,
+            hub_cofors=hub_cofors,
+            plant_cofor=self.plant.cofor
         )
-        as_is_scenario.is_baseline = True
+
+        self.ftl_tariffs_database = transformer.get_transformed_tariffs('ftl')
+        ftl_tariffs_by_key = ftl_tariffs_from_dataframe(self.ftl_tariffs_database)
+
+        self.ltl_tariffs_database = transformer.get_transformed_tariffs('ltl')
+        ltl_tariffs_by_key = ltl_tariffs_from_dataframe(self.ltl_tariffs_database)
+
+        self.tariffs_service = TariffService(
+            ftl_mr_tariffs=ftl_tariffs_by_key,
+            ltl_tariffs=ltl_tariffs_by_key,
+            hub_tariffs=None
+        )
+
+    def _create_region_baseline(self, region: str) -> SourcingRegion:
+        """
+        Creates baseline scenario for specified sourcing region, with currently used Hubs and Direct Routes.
+        Frequencies are already adjusted to currently available demand.
+        :param region: Sourcing region name.
+        :return: SourcingRegion object containing baseline scenario.
+        """
+        hubs = self._create_hubs(region)
+        direct_routes = self._create_direct_routes(region)
+
+        baseline_scenario = Scenario(
+            name='AS-IS',
+            routes=direct_routes,
+            hubs=set(hubs),
+        )
+        baseline_scenario.is_baseline = True
 
         region = SourcingRegion(
             name=region,
-            scenarios={as_is_scenario.name: as_is_scenario},
+            scenarios={baseline_scenario.name: baseline_scenario},
         )
         return region
 
-
-    def create_hub_domain_objects(self, region):
-
-        hub_demand_for_region = self.hub_demand_database[
+    def _create_hubs(self, region: str) -> set[Hub]:
+        """
+        Create Hub domain objects and it's dependencies for the specified sourcing region.
+        :param region:
+        :return:
+        """
+        region_filtered_hub_database = self.hub_demand_database[
             self.hub_demand_database['SHIPPER SOURCING REGION'] == region]
+        aggregated_demand_by_shipper = DemandDataTransformer(
+            region_filtered_hub_database).aggregate_database_by_shipper()
 
-        # Creating Hub network objects
-        hub_sellers = SellerRepository(hub_demand_for_region).get_by_shipper()
-        hub_carriers = CarrierRepository(hub_demand_for_region).get_all_hub()
-        aggregated_hub_demand_by_shipper = DemandDataTransformer(hub_demand_for_region).aggregate_database_by_shipper()
-        hub_shippers_by_cofor = ShipperRepository(
-            aggregated_hub_demand_by_shipper
-        ).get_all(
-            carriers=hub_carriers['first_leg'],
-            sellers_by_shipper=hub_sellers,
-            hub_shippers=True
+        sellers = SellerRepository(region_filtered_hub_database).get_by_shipper()
+        carriers = CarrierRepository(region_filtered_hub_database).get_all_hub()
+        hub_shippers_by_cofor = ShipperRepository(aggregated_demand_by_shipper).get_all(
+            sellers_by_shipper=sellers,
+            carriers=carriers['first_leg'],
+            are_hub_shippers=True
         )
-        verify_coordinates(shippers=hub_shippers_by_cofor)
+        verify_coordinates(hub_shippers_by_cofor)
 
-        hubs = HubRepository(hub_demand_for_region).get_all(
+        hubs = HubRepository(region_filtered_hub_database).get_all(
             shippers=hub_shippers_by_cofor,
-            carriers=hub_carriers,
+            carriers=carriers,
             vehicles=self.vehicles,
             plant=self.plant)
 
+        self._assign_hub_tariffs(hubs)
+        return hubs
+
+    def _assign_hub_tariffs(self, hubs: list[Hub]) -> None:
+        """ Retrieve and assign tariffs to hub first leg and linehaul routes. """
         for hub in hubs:
-            TariffService(self.ltl_tariffs).assign_ltl(hub.first_leg_routes)
+            self.tariffs_service.assign_ltl_routes(hub.first_leg_routes)
             validate_ltl_missing_tariffs(hub.first_leg_routes)
 
-            if hub.linehaul_transport_concept == 'FTL' or hub.linehaul_transport_concept == 'MR':
-                TariffService(self.ftl_tariffs).assign_linehaul(hub)
+            if hub.linehaul_transport_concept in {"FTL", "MR"}:
+                self.tariffs_service.assign_linehaul(hub.linehaul_route)
             else:
-                TariffService(self.ltl_tariffs).assign_ltl_linehaul(hub)
-
-            validate_linehaul_missing_tariffs(hub)
-
-        return hub_shippers_by_cofor, hubs
+                self.tariffs_service.assign_ltl_linehaul(hub.linehaul_route)
+            validate_linehaul_missing_tariffs(hub.linehaul_route)
 
 
-    def create_direct_domain_objects(self, region):
+    def _create_direct_routes(self, region):
         direct_demand_for_region = self.direct_demand_database[
             self.direct_demand_database['SHIPPER SOURCING REGION'] == region]
 
@@ -319,12 +325,12 @@ class BaselineBuilder:
             shippers=[s for s in direct_shippers_by_cofor.values()]
         )
 
-        operational_routes = DirectRouteRepository(
+        direct_routes = DirectRouteRepository(
             patterns_by_vehicle=route_patterns_by_vehicle,
             vehicles=self.vehicles,
         ).get_all()
 
-        TariffService(self.ftl_tariffs).assign_ftl(operational_routes)
-        validate_ftl_missing_tariffs(operational_routes)
+        self.tariffs_service.assign_ftl_mr_routes(direct_routes)
+        validate_ftl_missing_tariffs(direct_routes)
 
-        return direct_shippers_by_cofor, operational_routes
+        return direct_routes

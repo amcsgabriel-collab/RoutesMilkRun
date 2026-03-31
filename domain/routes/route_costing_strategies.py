@@ -20,9 +20,9 @@ class WeightBasedCosting:
     def build_tariff_key(self, route: Route, digits: int = 2):
         origin = route.demand.starting_point
         return (
-            route.demand.carrier.group,
+            route.carrier.group,
             self.weight_bracket_ltl(route),
-            route.demand.plant.cofor,
+            route.destination,
             origin.zip_key(digits),
             origin.cofor,
         )
@@ -38,7 +38,7 @@ class TruckBasedCosting:
     def build_tariff_key(route: Route, digits: int = 2):
         origin = route.demand.starting_point
         return (
-            route.demand.carrier,
+            route.carrier.group,
             route.vehicle.id,
             get_deviation_bin(route.demand.deviation)[0],
             origin.zip_key(digits),
@@ -49,5 +49,5 @@ class TruckBasedCosting:
     def route_cost(route: Route) -> float:
         if route.tariff is None:
             return 0.0
-        return route.tariff.price_for_stop(route.demand.count_of_stops, route.demand.deviation)
+        return route.tariff.price_for_stops(route.demand.count_of_stops, route.demand.deviation)
 

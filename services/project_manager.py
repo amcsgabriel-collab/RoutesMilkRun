@@ -2,6 +2,7 @@ from typing import Optional, Callable
 
 from domain.exceptions import CannotEditBaselineError, UnsavedScenarioError
 from domain.project import Project
+from domain.shipper import Shipper
 from services.graf_exporter import export_graf
 from services.hub_swap_service import HubSwapService
 from services.kpi_exporter import KpiExporter
@@ -102,18 +103,63 @@ class ProjectManager:
     def preview_swap_threshold(self, thresholds):
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        return self.hub_swap_service.preview_swap_threshold(self.project, thresholds)
+        return self.hub_swap_service.preview_swap_threshold(self.current_scenario, thresholds)
 
-    def move_hub_to_direct(self, hub_to_move):
+    def move_hub_to_direct(self, hub_to_move: list[str]) -> list[str]:
+        """
+        Moves the selected list of shippers from the Hub network to Direct
+        :param hub_to_move: List of Hub shipper COFORs to move.
+        """
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        self.hub_swap_service.move_hub_shippers_to_direct(self.project, hub_to_move)
+        scenario =  self.current_scenario
+        print('HUB TO DIRECT: BEFORE')
+        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
+        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
+        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
+        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
+        failed_shippers = self.hub_swap_service.move_hub_shippers_to_direct(self.project, hub_to_move)
+        print('HUB TO DIRECT: AFTER')
+        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
+        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
+        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
+        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
 
-    def move_direct_to_hub(self, direct_to_move):
+        return failed_shippers
+
+    def move_direct_to_hub(self, direct_to_move: list[str]) -> list[str]:
+        """
+        Tries to move the selected list of shippers from the Direct network to Hub. In case no Hub can be assigned,
+        returns the shipper to be used in the "manual hub assignment" flow.
+        :param direct_to_move: List of Direct shipper COFORs to move.
+        :return: List of shipper COFORs that couldn't be assigned to a Hub.
+        """
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
+        scenario = self.current_scenario
+        print('DIRECT TO HUB: BEFORE')
+        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
+        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
+        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
+        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
         shippers_without_hub = self.hub_swap_service.move_direct_shippers_to_hub(self.project, direct_to_move)
+        print('DIRECT TO HUB: AFTER')
+        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
+        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
+        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
+        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
         return shippers_without_hub
+
+    def manual_move_direct_to_hub(self, direct_to_move: str, assigned_hub: str) -> None:
+        """
+        Moves the specified shipper from the direct network to the assigned Hub.
+        :param direct_to_move: COFOR of the shipper to be moved.
+        :param assigned_hub: COFOR of the hub it was assigned to.
+        """
+        shipper = self.project.current_scenario.direct_shippers[direct_to_move]
+        hub = self.project.current_scenario.get_hub_by_cofor(assigned_hub)
+        self.hub_swap_service.move_direct_shipper_to_hub(self.project, shipper, hub)
+
 
     # ________________________________________________________________
     # SOLVER

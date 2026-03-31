@@ -1,5 +1,4 @@
 from domain.data_structures import Vehicle, Carrier
-from domain.hub import Hub
 from domain.routes.route import Route
 from domain.routes.route_costing_strategies import WeightBasedCosting
 from domain.routes.route_demand_aggregation_strategies import ShipperDemand
@@ -21,7 +20,7 @@ def get_frequency_bracket(chargeable_weight):
         return 4
 
 class FirstLegRoute(Route):
-    def __init__(self, hub: Hub, shipper: Shipper, vehicle: Vehicle, carrier: Carrier):
+    def __init__(self, hub, shipper: Shipper, vehicle: Vehicle, carrier: Carrier):
         super().__init__(
             vehicle=vehicle,
             demand=ShipperDemand(
@@ -32,6 +31,7 @@ class FirstLegRoute(Route):
             costing=WeightBasedCosting(),
         )
         self.hub = hub
+        self.shipper = shipper
         self.tariff: LtlTariff | HubTariff | None  = None
         self.transport_concept = "LTL"
 
@@ -48,6 +48,10 @@ class FirstLegRoute(Route):
         Frequency of the first leg increases with specified weight thresholds, up to the linehaul frequency.
         """
         return min(
-            get_frequency_bracket(self.costing.chargeable_weight()),
+            get_frequency_bracket(self.costing.chargeable_weight(self)),
             self.hub.linehaul_route.frequency
         )
+
+    @property
+    def destination(self):
+        return self.hub.cofor

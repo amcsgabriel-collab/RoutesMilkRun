@@ -26,9 +26,6 @@ class Scenario:
 
     name: str
 
-    hub_shippers: dict[str, Shipper]
-    direct_shippers: dict[str, Shipper]
-
     hubs: set[Hub] = field(default_factory=set)
     draft_hubs: set[Hub] = field(default_factory=set)
 
@@ -91,62 +88,64 @@ class Scenario:
         self.blocked_routes.remove(route)
 
     @property
+    def direct_shippers(self):
+        """ COFOR Keyed dictionary of shippers currently in direct routes."""
+        return {shipper.cofor: shipper
+                for route in self.get_in_use_routes()
+                for shipper in route.pattern.shippers}
+
+    @property
+    def hub_shippers(self):
+        """ COFOR Keyed dictionary of shippers currently in hubs."""
+        return {shipper.cofor: shipper
+                for hub in self.get_in_use_hubs()
+                for shipper in hub.shippers}
+
+    @property
     def locked_shippers(self):
         return [s for route in self.locked_routes for s in route.pattern.shippers]
 
     @property
     def unlocked_shippers(self):
-        return [s for s in self.direct_shippers if s not in self.locked_shippers]
+        """ List of shippers that are not locked"""
+        return [s for s in self.direct_shippers.values() if s not in self.locked_shippers]
 
     def get_shippers_from_key(self, shippers_key):
+        """ Gets a frozenset of shippers based on list of COFORs"""
         return frozenset(self.direct_shippers[shipper_cofor] for shipper_cofor in shippers_key)
 
-    def get_hub_by_cofor(self, hub_cofor):
+    def get_hub_by_cofor(self, hub_cofor:str) -> Hub:
+        """ Finds the Hub by the specified COFOR. """
         for hub in self.get_in_use_hubs():
             if hub.cofor == hub_cofor:
                 return hub
-        raise KeyError(f'Hub cofor {hub_cofor} not found.')
+        raise KeyError('Hub COFOR specified does not exist.')
 
-    def move_hub_to_direct(self, shipper_cofor):
-        shipper = self.hub_shippers.pop(shipper_cofor)
-        self.direct_shippers[shipper_cofor] = shipper
-
-        hub = self.find_shipper_hub(shipper)
-        if hub:
-            hub.remove_shipper(shipper)
-
-    def move_direct_to_hub(self, shipper, hub_cofor):
-        self.direct_shippers.pop(shipper.cofor)
-        self.hub_shippers[shipper.cofor] = shipper
-        hub = self.get_hub_by_cofor(hub_cofor)
-        hub.add_shipper(shipper)
-
-        route = self.find_shipper_route(shipper)
-        if route:
-            route.pattern.remove_shipper(shipper)
-
-    def swap_shipper_network(self, shipper):
-        if shipper.cofor in self.hub_shippers:
-            self.hub_shippers.pop(shipper.cofor)
-            self.direct_shippers[shipper.cofor] = shipper
-        elif shipper.cofor in self.direct_shippers:
-            self.direct_shippers.pop(shipper.cofor)
-            self.hub_shippers[shipper.cofor] = shipper
-
-
-    def find_shipper_hub(self, shipper):
+    def find_shipper_hub(self, shipper: Shipper) -> Hub:
+        """ Finds the Hub that contains a shipper. """
         for hub in self.get_in_use_hubs():
             if shipper in hub.shippers:
                 return hub
-        return None
+        raise KeyError('Shipper passed is not in one of currently in use Hubs.')
 
-    def find_shipper_route(self, shipper):
+    def find_shipper_routes(self, shipper):
+        """ Finds the DirectRoute object that contains a shipper. """
+        routes = []
         for route in self.get_in_use_routes():
             if shipper in route.pattern.shippers:
-                return route
-        return None
+                routes.append(route)
+        if routes:
+            return routes
+        raise KeyError('Shipper passed is not in one of currently in use Direct Routes.')
+
+    def create_draft_routes(self) -> None:
+        """ Creates a draft in current scenario by copying current routes."""
+        if self.draft_routes:
+            return
+        else: self.draft_routes = {r.copy() for r in self.routes}
 
     def _routes_by_concept(self, concept: str | None = None) -> set[DirectRoute]:
+        """ Get all DirectRoutes with specified transport concept. """
         routes = self.get_in_use_routes()
         if concept is None:
             return set(routes)

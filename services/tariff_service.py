@@ -18,7 +18,7 @@ class TariffService:
     def assign_route(self, route, tariffs_base: dict) -> None:
         route.tariff, route.tariff_source = self._find_tariff(
             tariffs_base=tariffs_base,
-            candidate_keys=route.tariff_key_bundle(),
+            candidate_keys=route.tariff_key_bundle,
         )
 
     def assign_routes(self, routes, tariffs_base: dict) -> None:

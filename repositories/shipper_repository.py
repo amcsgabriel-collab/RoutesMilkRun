@@ -12,7 +12,7 @@ class ShipperRepository:
         self,
         carriers: dict[str, Carrier],
         sellers_by_shipper: dict[str, list[Seller]],
-        hub_shippers: bool = False
+        are_hub_shippers: bool = False
     ) -> dict[str, Shipper]:
         return {
             row["Shipper COFOR"]: Shipper(
@@ -27,7 +27,7 @@ class ShipperRepository:
                 weight=row["Avg. Weight / week"],
                 volume=row["Avg. Volume / week"],
                 loading_meters=row["Avg. Loading Meters / week"],
-                carrier=carriers[row["First Leg Carrier ID"] if hub_shippers else row["Carrier ID"] ],
+                carrier=carriers[row["First Leg Carrier ID"] if are_hub_shippers else row["Carrier ID"] ],
                 sellers=sellers_by_shipper.get(row["Shipper COFOR"], []),
                 coordinates=(row["Latitude"], row["Longitude"]),
             )

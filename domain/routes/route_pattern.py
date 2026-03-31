@@ -1,9 +1,8 @@
 import copy
 
-from domain.exceptions import DeviationNotCalculatedError
 from domain.shipper import Shipper
 from domain.data_structures import Plant
-from domain.domain_algorithms import get_deviation_bin, greedy_nearest_neighbor
+from domain.domain_algorithms import get_deviation_bin, greedy_nearest_neighbor, make_haversine_cache
 
 
 class RoutePattern:
@@ -78,7 +77,7 @@ class RoutePattern:
         for shipper in self.shipper_allocation.keys():
             self.shipper_allocation[shipper] = 1
 
-    def order_shippers(self, distance_function):
+    def order_shippers(self, distance_function=make_haversine_cache()):
         self.starting_point = max(
             self.shippers,
             key=lambda p: distance_function(p.coordinates, self.plant.coordinates)
@@ -96,7 +95,7 @@ class RoutePattern:
             for idx, shipper in enumerate(self.sequence)
         }
 
-    def calculate_deviation(self, distance_function):
+    def calculate_deviation(self, distance_function=make_haversine_cache()):
         self.deviation = 0
 
         if self.count_of_stops > 1:
@@ -104,3 +103,24 @@ class RoutePattern:
             self.deviation = round((sum(self._leg_distance.values()) - distance_direct) / (self.count_of_stops - 1), 3)
 
         self.deviation_bin, self.mr_cluster = get_deviation_bin(self.deviation)
+
+    def remove_shipper(self, shipper: Shipper) -> "RoutePattern":
+        if shipper not in self.shippers:
+            raise ValueError("Shipper not in route pattern")
+
+        new_shippers = set(self.shippers)
+        new_shippers.remove(shipper)
+
+        if not new_shippers:
+            raise ValueError("Cannot create a route pattern with no shippers")
+
+        new_pattern = RoutePattern(
+            shippers=new_shippers,
+            plant=self.plant,
+        )
+        new_pattern.shipper_allocation = {
+            s: self.shipper_allocation[s]
+            for s in new_shippers
+        }
+        new_pattern.is_new_pattern = self.is_new_pattern
+        return new_pattern

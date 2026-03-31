@@ -1,63 +1,6 @@
 GRAF_TEMPLATE_HEADER_ROW = 4
-
 VOLUME_CHARGEABLE_WEIGHT_CONVERSION_RATE = 250
-
-TARIFFS_RELEVANT_COLUMNS = [
-    'Unique_KEY', 'iTMS_Mode', 'Singletrip', 'non-Singletrip',
-    'Roundtrip', 'Currency', 'Small (0-30km)', 'Low (30-50 km)',
-    'Medium (50-100km)', 'High (100-150km)', '>150km', 'Price_min',
-    'Price_max', '<=200_LTL', '<=600_LTL', '<=1000_LTL', '<=2000_LTL',
-    '<=4000_LTL', '<=10000_LTL', '<=15000_LTL', '<=20000_LTL', '<=25000_LTL',
-    '>25000_LTL', '<=3000_HUB', '<=5000_HUB', '<=7000_HUB', '<=10000_HUB', '<=15000_HUB',
-    '<=20000_HUB', '>20000_HUB'
-]
-
-TARIFFS_COLUMNS_DIRECT = [
-    {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
-    {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
-    {'raw': 'Singletrip', 'final': 'ST', 'dtype': 'float32'},
-    {'raw': 'Roundtrip', 'final': 'RT', 'dtype': 'float32'},
-    {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
-    {'raw': 'Small (0-30km)', 'final': 'Small (0-30km)', 'dtype': 'float32'},
-    {'raw': 'Low (30-50 km)', 'final': 'Low (30-50 km)', 'dtype': 'float32'},
-    {'raw': 'Medium (50-100km)', 'final': 'Medium (50-100km)', 'dtype': 'float32'},
-    {'raw': 'High (100-150km)', 'final': 'High (100-150km)', 'dtype': 'float32'},
-    {'raw': '>150km', 'final': '>150km', 'dtype': 'float32'},
-]
-
-TARIFFS_COLUMNS_LTL = [
-    {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
-    {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
-    {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
-    {'raw': 'Price_min', 'final': 'Min Price', 'dtype': 'float32'},
-    {'raw': 'Price_max', 'final': 'Max Price', 'dtype': 'float32'},
-    {'raw': '<=200_LTL', 'final': '<=200_LTL', 'dtype': 'float32'},
-    {'raw': '<=600_LTL', 'final': '<=600_LTL', 'dtype': 'float32'},
-    {'raw': '<=1000_LTL', 'final': '<=1000_LTL', 'dtype': 'float32'},
-    {'raw': '<=2000_LTL', 'final': '<=2000_LTL', 'dtype': 'float32'},
-    {'raw': '<=4000_LTL', 'final': '<=4000_LTL', 'dtype': 'float32'},
-    {'raw': '<=10000_LTL', 'final': '<=10000_LTL', 'dtype': 'float32'},
-    {'raw': '<=15000_LTL', 'final': '<=15000_LTL', 'dtype': 'float32'},
-    {'raw': '<=20000_LTL', 'final': '<=20000_LTL', 'dtype': 'float32'},
-    {'raw': '<=25000_LTL', 'final': '<=25000_LTL', 'dtype': 'float32'},
-    {'raw': '>25000_LTL', 'final': '>25000_LTL', 'dtype': 'float32'},
-]
-
-TARIFFS_COLUMNS_HUB = [
-    {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
-    {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
-    {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
-    {'raw': 'Price_min', 'final': 'Min Price', 'dtype': 'float32'},
-    {'raw': 'Price_max', 'final': 'Max Price', 'dtype': 'float32'},
-    {'raw': '<=3000_HUB', 'final': '<=3000_HUB', 'dtype': 'float32'},
-    {'raw': '<=5000_HUB', 'final': '<=5000_HUB', 'dtype': 'float32'},
-    {'raw': '<=7000_HUB', 'final': '<=7000_HUB', 'dtype': 'float32'},
-    {'raw': '<=10000_HUB', 'final': '<=10000_HUB', 'dtype': 'float32'},
-    {'raw': '<=15000_HUB', 'final': '<=15000_HUB', 'dtype': 'float32'},
-    {'raw': '<=20000_HUB', 'final': '<=20000_HUB', 'dtype': 'float32'},
-    {'raw': '>20000_HUB', 'final': '>20000_HUB', 'dtype': 'float32'},
-]
-
+DEFAULT_VEHICLE_ID = "SR30"
 
 def get_column_sequence_graf_format(
         direct_or_hub: str,
