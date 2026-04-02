@@ -30,7 +30,6 @@ class DemandDataTransformer:
             self.add_hub_location_data()
             self.split_linehaul_first_leg_columns()
         self.add_carrier_consolidated_name()
-        self.filter_parts_only()
         return self.database
 
     def split_linehaul_first_leg_columns(self):
@@ -125,9 +124,6 @@ class DemandDataTransformer:
             how="left",
             on="HUB COFOR"
         )
-
-    def filter_parts_only(self):
-        self.database = self.database[self.database['Parts or Empties'] == 'P'] #TODO: Remove once empties implemented.
 
     def aggregate_database_by_shipper(self):
         key = ['Shipper COFOR']

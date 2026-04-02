@@ -90,8 +90,7 @@ class TariffsTransformer:
         tariffs = self._filter_tariffs_to_destination(tariffs, tariffs_type)
         if tariffs_type == 'ftl':
             tariffs = self._melt_tariffs_deviation_bucket(tariffs)
-            tariffs = self._melt_tariffs_trip_type(tariffs)
-            return self._filter_single_trip_only(tariffs)
+            return self._melt_tariffs_trip_type(tariffs)
 
         return self._melt_tariffs_chargeable_weight(tariffs, tariffs_type)
 
@@ -197,10 +196,6 @@ class TariffsTransformer:
             var_name='Trip Type',
             value_name='Base Cost'
         )
-
-    @staticmethod
-    def _filter_single_trip_only(tariffs: pd.DataFrame) -> pd.DataFrame:
-        return tariffs[tariffs['Trip Type'] == 'ST']
 
     @staticmethod
     def _melt_tariffs_chargeable_weight(tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:

@@ -5,6 +5,7 @@ from domain.routes.route_demand_aggregation_strategies import ShipperDemand
 from domain.shipper import Shipper
 from domain.tariff import LtlTariff, HubTariff
 
+
 def get_frequency_bracket(chargeable_weight):
     if chargeable_weight is None:
         raise ValueError("Chargeable weight cannot be None")
@@ -19,28 +20,33 @@ def get_frequency_bracket(chargeable_weight):
     else:
         return 4
 
+
 class FirstLegRoute(Route):
-    def __init__(self, hub, shipper: Shipper, vehicle: Vehicle, carrier: Carrier):
+    def __init__(self, hub, shipper: Shipper, vehicle: Vehicle, carrier: Carrier, flow_type: str):
         super().__init__(
             vehicle=vehicle,
             demand=ShipperDemand(
                 shipper=shipper,
                 plant=hub.plant,
-                carrier=carrier
+                carrier=carrier,
+                flow_type=flow_type
             ),
-            costing=WeightBasedCosting(),
+            costing=WeightBasedCosting()
         )
         self.hub = hub
         self.shipper = shipper
-        self.tariff: LtlTariff | HubTariff | None  = None
+        self.tariff: LtlTariff | HubTariff | None = None
         self.transport_concept = "LTL"
 
     def __hash__(self):
-        return hash(self.demand.shipper)
+        return hash((self.demand.shipper, self.demand.flow_type))
 
     def __eq__(self, other):
-        return ((isinstance(other, FirstLegRoute))
-                and self.demand.shipper == other.demand.shipper)
+        return (
+                isinstance(other, FirstLegRoute)
+                and self.demand.shipper == other.demand.shipper
+                and self.demand.flow_type == other.demand.flow_type
+        )
 
     @property
     def frequency(self):
@@ -54,4 +60,7 @@ class FirstLegRoute(Route):
 
     @property
     def destination(self):
-        return self.hub.cofor
+        return self.hub
+
+    def export_dataframe(self, *args, **kwargs):
+        pass

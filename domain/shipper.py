@@ -1,7 +1,8 @@
 import copy
 
+from domain.demand import Demand
 from domain.general_algorithms import decimal_to_dms_str
-from domain.data_structures import Carrier, Seller
+from domain.data_structures import Carrier
 
 MIN_TRUCK_CAPACITIES = {'Weight Capacity': 24000, 'Load Meter Capacity': 13.6, 'Volume Capacity': 92.75}
 MAX_FREQUENCY=5
@@ -10,35 +11,32 @@ class Shipper:
     def __init__(
             self,
             cofor: str,
-            sellers: set[Seller],
             name: str,
             zip_code: str,
             city: str,
             street: str,
             country: str,
             sourcing_region: str,
-            volume: float,
-            weight: float,
-            loading_meters: float,
+            parts_demand: Demand,
+            empties_demand: Demand,
             carrier: Carrier,
+            docks: list[str],
             original_network: str = None,
             coordinates: tuple[float, float] | None = None,
     ):
         self.cofor = cofor
-        self.sellers = sellers
         self.name = name
         self.original_network = original_network
         self.zip_code = zip_code
         self.city = city
         self.street = street
         self.country = country
+        self.docks = docks
         self.sourcing_region = sourcing_region
-        self.volume = volume
-        self.weight = weight
-        self.loading_meters = loading_meters
+        self.parts_demand = parts_demand
+        self.empties_demand = empties_demand
         self.carrier = carrier
         self.coordinates = coordinates
-        self.is_ftl_exclusive_shipper = self.verify_ftl_exclusive_shipper()
 
 
     def __eq__(self, other):
@@ -50,48 +48,68 @@ class Shipper:
     def copy(self):
         return copy.deepcopy(self)
 
+    def zip_key(self, digits):
+        return self.country + self.zip_code[:digits]
+
     @property
     def formatted_coordinates(self):
         return decimal_to_dms_str(self.coordinates)
 
     @property
     def has_demand(self):
-        return (self.volume > 0) or (self.weight > 0) or (self.loading_meters > 0)
+        return self.parts_demand is not None
 
-    def zip_key(self, digits):
-        return self.country + self.zip_code[:digits]
+    @property
+    def has_empties_demand(self):
+        return self.empties_demand is not None
 
-    def verify_ftl_exclusive_shipper(self):
+    @property
+    def is_ftl_exclusive_parts(self):
+        return self.verify_ftl_exclusive(self.parts_demand)
+
+    @property
+    def is_ftl_exclusive_empties(self):
+        return self.verify_ftl_exclusive(self.empties_demand)
+
+    @staticmethod
+    def verify_ftl_exclusive(demand):
         """
             Returns True if the shipper's demand exceeds the maximum theoretical
             capacity of frequency (MAX_TRUCKS) of the smallest available vehicle type,
             where milkruns would be inviable regardless of route combination.
             """
-        return ((self.weight > MIN_TRUCK_CAPACITIES["Weight Capacity"] * MAX_FREQUENCY)
-                or (self.volume > MIN_TRUCK_CAPACITIES["Volume Capacity"] * MAX_FREQUENCY)
-                or (self.loading_meters > MIN_TRUCK_CAPACITIES["Load Meter Capacity"] * MAX_FREQUENCY))
+        return ((demand.weight > MIN_TRUCK_CAPACITIES["Weight Capacity"] * MAX_FREQUENCY)
+                or (demand.volume > MIN_TRUCK_CAPACITIES["Volume Capacity"] * MAX_FREQUENCY)
+                or (demand.loading_meters > MIN_TRUCK_CAPACITIES["Load Meter Capacity"] * MAX_FREQUENCY))
+
+    @property
+    def parts_summary(self):
+        return self.summary(self.parts_demand)
+
+    @property
+    def empties_summary(self):
+        return self.summary(self.empties_demand)
 
     def qualifies_for_hub(self, thresholds):
         if thresholds["weight"] is not None:
-            if self.weight >= thresholds["weight"]:
+            if self.parts_demand.weight >= thresholds["weight"]:
                 return False
         if thresholds["volume"] is not None:
-            if self.volume >= thresholds["volume"]:
+            if self.parts_demand.volume >= thresholds["volume"]:
                 return False
         if thresholds["loading_meters"] is not None:
-            if self.loading_meters >= thresholds["loading_meters"]:
+            if self.parts_demand.loading_meters >= thresholds["loading_meters"]:
                 return False
         return True
 
-    @property
-    def summary(self):
+    def summary(self, demand: Demand):
         return {
             "name": self.name,
             "cofor": self.cofor,
             "zip_key": self.zip_key(2),
-            "total_weight": self.weight,
-            "total_volume": self.volume,
-            "total_loading_meters": self.loading_meters,
+            "weight": demand.weight,
+            "volume": demand.volume,
+            "loading_meters": demand.loading_meters,
             "coordinates": self.coordinates,
-            "original_network": self.original_network,
+            "original_network": demand.original_network,
         }

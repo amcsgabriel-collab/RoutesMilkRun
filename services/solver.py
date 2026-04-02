@@ -72,8 +72,8 @@ class Solver:
             if shipper not in locked_shippers
                and shipper.has_demand
         }
-        self.ftl_shippers = {s for s in self.filtered_shippers if s.is_ftl_exclusive_shipper}
-        self.mr_shippers = {s for s in self.filtered_shippers if not s.is_ftl_exclusive_shipper}
+        self.ftl_shippers = {s for s in self.filtered_shippers if s.is_ftl_exclusive_parts}
+        self.mr_shippers = {s for s in self.filtered_shippers if not s.is_ftl_exclusive_parts}
         self.solution_routes = set(project.current_scenario.locked_routes.copy())
         self.blocked_patterns = {r.pattern for r in project.current_scenario.blocked_routes}
         self.vehicle_permutation_service = VehiclePermutationService(project.context.vehicles)
@@ -182,6 +182,7 @@ class MilkRunSolver:
             self,
             shippers: set[Shipper],
             existing_routes: set[DirectRoute],
+            existing_empties_routes: set[DirectRoute],
             plant: Plant,
             vehicle_permutation_service: VehiclePermutationService,
             tariffs_service: TariffService,

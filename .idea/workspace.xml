@@ -5,11 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6209f30f-32f5-49da-b9ce-970dbb10e034" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/domain/demand.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/domain/trip.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/data_structures.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/data_structures.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/domain/hub.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/hub.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/kpi_set.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/kpi_set.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/project.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/project.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/direct_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/direct_route.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/domain/routes/first_leg_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/first_leg_route.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/domain/routes/linehaul_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/linehaul_route.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/domain/routes/route.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/route.py" afterDir="false" />
@@ -17,18 +18,12 @@
       <change beforePath="$PROJECT_DIR$/domain/routes/route_demand_aggregation_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/route_demand_aggregation_strategies.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/domain/routes/route_pattern.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/route_pattern.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/domain/scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/infrastructure/graf_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/infrastructure/graf_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/shipper.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/shipper.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/demand_data_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/infrastructure/demand_data_transformer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/infrastructure/tariffs_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/infrastructure/tariffs_transformer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/repositories/shipper_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/repositories/shipper_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/repositories/vehicle_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/repositories/vehicle_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/baseline_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/baseline_builder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/hub_swap_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/hub_swap_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/map_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/map_generator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/project_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/project_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/scenario_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/scenario_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/tariff_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/tariff_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/settings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/js/ui/swap_hub_direct.js" beforeDir="false" afterPath="$PROJECT_DIR$/web/js/ui/swap_hub_direct.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/tariffs_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/repositories/tariffs_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/graf_exporter.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/graf_exporter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/solver.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/solver.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -62,61 +57,61 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python tests.Python tests in test_all.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_data_loader.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_html.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_operational_routes.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_route_patterns.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_routes.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_shippers.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_solver.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_tariffs_service.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_vehicle_loader.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_vehicle_permutation_service.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python tests.Python tests in test_vehicle_repository.py.executor&quot;: &quot;Run&quot;,
-    &quot;Python.app.executor&quot;: &quot;Run&quot;,
-    &quot;Python.data_preparation.executor&quot;: &quot;Run&quot;,
-    &quot;Python.debugger.executor&quot;: &quot;Run&quot;,
-    &quot;Python.interface.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.map_generation.executor&quot;: &quot;Run&quot;,
-    &quot;Python.metrics.executor&quot;: &quot;Run&quot;,
-    &quot;Python.operational_route.executor&quot;: &quot;Run&quot;,
-    &quot;Python.project_main_window.executor&quot;: &quot;Run&quot;,
-    &quot;Python.pywebview_main.executor&quot;: &quot;Run&quot;,
-    &quot;Python.router.executor&quot;: &quot;Run&quot;,
-    &quot;Python.solver.executor&quot;: &quot;Run&quot;,
-    &quot;Python.starting_window.executor&quot;: &quot;Run&quot;,
-    &quot;Python.tariffs.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_router.executor&quot;: &quot;Run&quot;,
-    &quot;Python.testingthe_html.executor&quot;: &quot;Run&quot;,
-    &quot;Python.vehicle_loader.executor&quot;: &quot;Run&quot;,
-    &quot;Python.vehicle_repository.executor&quot;: &quot;Run&quot;,
-    &quot;Python.vrp_solver.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
-    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;database.data.extractors.current.export.id&quot;: &quot;Semicolon-separated_id&quot;,
-    &quot;database.data.extractors.current.id&quot;: &quot;Semicolon-separated_id&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;refactoring-cleanup&quot;,
-    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.IDE.editor.colors&quot;,
-    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "DefaultHtmlFileTemplate": "HTML File",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python tests.Python tests in test_all.py.executor": "Run",
+    "Python tests.Python tests in test_data_loader.py.executor": "Run",
+    "Python tests.Python tests in test_html.py.executor": "Run",
+    "Python tests.Python tests in test_operational_routes.py.executor": "Run",
+    "Python tests.Python tests in test_route_patterns.py.executor": "Run",
+    "Python tests.Python tests in test_routes.py.executor": "Run",
+    "Python tests.Python tests in test_shippers.py.executor": "Run",
+    "Python tests.Python tests in test_solver.py.executor": "Run",
+    "Python tests.Python tests in test_tariffs_service.py.executor": "Run",
+    "Python tests.Python tests in test_vehicle_loader.py.executor": "Run",
+    "Python tests.Python tests in test_vehicle_permutation_service.py.executor": "Run",
+    "Python tests.Python tests in test_vehicle_repository.py.executor": "Run",
+    "Python.app.executor": "Run",
+    "Python.data_preparation.executor": "Run",
+    "Python.debugger.executor": "Run",
+    "Python.interface.executor": "Run",
+    "Python.main.executor": "Run",
+    "Python.map_generation.executor": "Run",
+    "Python.metrics.executor": "Run",
+    "Python.operational_route.executor": "Run",
+    "Python.project_main_window.executor": "Run",
+    "Python.pywebview_main.executor": "Run",
+    "Python.router.executor": "Run",
+    "Python.solver.executor": "Run",
+    "Python.starting_window.executor": "Run",
+    "Python.tariffs.executor": "Run",
+    "Python.test_router.executor": "Run",
+    "Python.testingthe_html.executor": "Run",
+    "Python.vehicle_loader.executor": "Run",
+    "Python.vehicle_repository.executor": "Run",
+    "Python.vrp_solver.executor": "Run",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "ai.playground.ignore.import.keys.banner.in.settings": "true",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "database.data.extractors.current.export.id": "Semicolon-separated_id",
+    "database.data.extractors.current.id": "Semicolon-separated_id",
+    "git-widget-placeholder": "empties__flow",
+    "junie.onboarding.icon.badge.shown": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "reference.settingsdialog.IDE.editor.colors",
+    "to.speed.mode.migration.done": "true",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\web" />

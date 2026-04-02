@@ -6,7 +6,7 @@ from domain.tariff import FtlTariff, LtlTariff
 
 
 class LinehaulRoute(Route):
-    def __init__(self, hub, vehicle: Vehicle, carrier: Carrier):
+    def __init__(self, hub, vehicle: Vehicle, carrier: Carrier, flow_type: str):
         costing = (
             TruckBasedCosting()
             if hub.linehaul_transport_concept == "FTL"
@@ -14,19 +14,20 @@ class LinehaulRoute(Route):
         )
         super().__init__(
             vehicle=vehicle,
-            demand=HubAggregateDemand(hub),
+            demand=HubAggregateDemand(hub, flow_type=flow_type),
             costing=costing,
-
         )
         self.tariff: FtlTariff | LtlTariff | None = None
         self.linehaul_carrier: Carrier = carrier
 
     def __hash__(self):
-        return hash(self.demand.hub)
+        return hash((self.demand.hub, self.demand.flow_type))
 
     def __eq__(self, other):
         return ((isinstance(other, LinehaulRoute))
-                and self.demand.hub == other.demand.hub)
+                and self.demand.hub == other.demand.hub
+                and self.demand.flow_type == other.demand.flow_type
+                )
 
     @property
     def carrier(self) -> Carrier:
@@ -34,4 +35,7 @@ class LinehaulRoute(Route):
 
     @property
     def destination(self):
-        return self.demand.plant.cofor
+        return self.demand.plant
+
+    def export_dataframe(self):
+        pass

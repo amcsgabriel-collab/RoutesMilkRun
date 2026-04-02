@@ -15,9 +15,10 @@ class RoutePattern:
             self,
             shippers: set[Shipper],
             plant: Plant,
+            flow_type: str,
             route_name: str | None = None,
             tour: str | None = None,
-            mr_overutilization_rate: float = 0.05
+            mr_overutilization_rate: float = 0.05,
     ):
         self.count_of_stops = len(shippers)
         if self.count_of_stops > 4:
@@ -25,6 +26,7 @@ class RoutePattern:
         if self.count_of_stops == 0:
             raise ValueError(f'Passed shippers list is empty. Please verify.')
         self.shippers = frozenset(shippers)
+        self.flow_type = flow_type
         self.is_new_pattern = False
         self.plant = plant
         self.route_name = route_name
@@ -49,10 +51,12 @@ class RoutePattern:
     def __eq__(self, other):
         return (isinstance(other, RoutePattern)
                 and self.shippers == other.shippers
-                and self.route_name == other.route_name)
+                and self.route_name == other.route_name
+                and self.flow_type == other.flow_type
+                )
 
     def __hash__(self):
-        return hash((self.shippers, self.route_name))
+        return hash((self.shippers, self.route_name, self.flow_type))
 
     def copy(self):
         return copy.deepcopy(self)
@@ -61,17 +65,20 @@ class RoutePattern:
     def shippers_key(self):
         return tuple(sorted(s.cofor for s in self.shippers))
 
+    def _demand(self, shipper: Shipper):
+        return shipper.parts_demand if self.flow_type == "parts" else shipper.empties_demand
+
     @property
     def weight(self):
-        return sum(shipper.weight * allocation for shipper, allocation in self.shipper_allocation.items())
+        return sum(self._demand(shipper).weight * allocation for shipper, allocation in self.shipper_allocation.items())
 
     @property
     def volume(self):
-        return sum(shipper.volume * allocation for shipper, allocation in self.shipper_allocation.items())
+        return sum(self._demand(shipper).volume * allocation for shipper, allocation in self.shipper_allocation.items())
 
     @property
     def loading_meters(self):
-        return sum(shipper.loading_meters * allocation for shipper, allocation in self.shipper_allocation.items())
+        return sum(self._demand(shipper).loading_meters * allocation for shipper, allocation in self.shipper_allocation.items())
 
     def reset_allocation(self):
         for shipper in self.shipper_allocation.keys():
@@ -117,6 +124,7 @@ class RoutePattern:
         new_pattern = RoutePattern(
             shippers=new_shippers,
             plant=self.plant,
+            flow_type=self.flow_type,
         )
         new_pattern.shipper_allocation = {
             s: self.shipper_allocation[s]

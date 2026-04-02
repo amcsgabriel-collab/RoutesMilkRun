@@ -25,6 +25,7 @@ class Hub:
             linehaul_vehicle: Vehicle,
             linehaul_transport_concept,
             coordinates: tuple[float, float],
+            has_empties_flow: bool = False,
     ):
         self.route_id = route
         self.cofor = cofor
@@ -33,42 +34,77 @@ class Hub:
         self.zip_code = str(zip_code)
         self.plant = plant
         self.shippers = shippers
+        self.has_empties_flow = has_empties_flow
         self.first_leg_carrier = first_leg_carrier
         self.first_leg_vehicle = first_leg_vehicle
         self.linehaul_transport_concept = linehaul_transport_concept
-        self.linehaul_route = LinehaulRoute(hub=self, vehicle=linehaul_vehicle, carrier=linehaul_carrier)
+        self.parts_first_leg_routes = set()
+        self.empties_first_leg_routes = set()
+        self.parts_linehaul_route = LinehaulRoute(hub=self, vehicle=linehaul_vehicle, carrier=linehaul_carrier, flow_type="parts")
         self.coordinates = coordinates
-        self.refresh_first_leg_routes()
+        self.refresh_first_leg_routes("parts")
+        if self.has_empties_flow:
+            self.refresh_first_leg_routes("empties")
+            self.empties_linehaul_route = LinehaulRoute(hub=self,
+                                                        vehicle=linehaul_vehicle,
+                                                        carrier=linehaul_carrier,
+                                                        flow_type="empties")
+
 
     @property
     def formatted_coordinates(self):
         return decimal_to_dms_str(self.coordinates)
 
     @property
-    def pre_carriage_costs(self):
-        return sum(r.total_cost for r in self.first_leg_routes)
+    def empties_pre_carriage_costs(self):
+        return sum(r.total_cost for r in self.empties_first_leg_routes)
 
     @property
-    def total_cost(self):
-        return self.pre_carriage_costs + self.linehaul_route.total_cost
+    def empties_total_cost(self):
+        return self.empties_pre_carriage_costs + self.empties_linehaul_route.total_cost
+
+    @property
+    def parts_pre_carriage_costs(self):
+        return sum(r.total_cost for r in self.parts_first_leg_routes)
+
+    @property
+    def parts_total_cost(self):
+        return self.parts_pre_carriage_costs + self.parts_linehaul_route.total_cost
+
+    @property
+    def pre_carriage_costs(self):
+        return self.parts_pre_carriage_costs + self.empties_pre_carriage_costs
+
+    @property
+    def linehaul_total_cost(self):
+        return self.parts_linehaul_route.total_cost + self.empties_linehaul_route.total_cost
+
+    @property
+    def total_costs(self):
+        return self.pre_carriage_costs + self.linehaul_total_cost + self.parts_total_cost
 
     def zip_key(self, digits):
         return self.country + self.zip_code[:digits]
 
-    @property
-    def summary(self):
+    def summary(self, flow_direction):
+        if flow_direction == "parts":
+            linehaul_route = self.parts_linehaul_route
+            pre_carriage_costs = self.parts_pre_carriage_costs
+        else:
+            linehaul_route = self.empties_linehaul_route
+            pre_carriage_costs = self.empties_pre_carriage_costs
         return {
             "name": self.name,
             "cofor": self.cofor,
-            "first_leg_cost": self.pre_carriage_costs,
-            "linehaul_frequency": self.linehaul_route.frequency,
-            "linehaul_cost": self.linehaul_route.total_cost,
-            "linehaul_weight": self.linehaul_route.weight,
-            "linehaul_volume": self.linehaul_route.volume,
-            "linehaul_loading_meters": self.linehaul_route.loading_meters,
-            "linehaul_weight_utilization": self.linehaul_route.weight_utilization,
-            "linehaul_volume_utilization": self.linehaul_route.volume_utilization,
-            "linehaul_loading_meters_utilization": self.linehaul_route.loading_meters_utilization,
+            "first_leg_cost": pre_carriage_costs,
+            "linehaul_frequency": linehaul_route.frequency,
+            "linehaul_cost": linehaul_route.total_cost,
+            "linehaul_weight": linehaul_route.weight,
+            "linehaul_volume": linehaul_route.volume,
+            "linehaul_loading_meters": linehaul_route.loading_meters,
+            "linehaul_weight_utilization": linehaul_route.weight_utilization,
+            "linehaul_volume_utilization": linehaul_route.volume_utilization,
+            "linehaul_loading_meters_utilization": linehaul_route.loading_meters_utilization,
             "coordinates": self.coordinates,
         }
 
@@ -79,18 +115,25 @@ class Hub:
             "cofor": self.cofor,
         }
 
-    def refresh_first_leg_routes(self):
-        self.first_leg_routes = {
+    def refresh_first_leg_routes(self, flow_direction: str):
+        routes = {
             FirstLegRoute(
                 shipper=shipper,
                 carrier=self.first_leg_carrier,
                 vehicle=self.first_leg_vehicle,
-                hub=self
+                hub=self,
+                flow_type=flow_direction
             ) for shipper in self.shippers
         }
+        if flow_direction == "parts":
+            self.parts_first_leg_routes = routes
+        else:
+            self.empties_first_leg_routes = routes
 
-    def generate_route_name(self):
-        return f"GD_{self.name} #PS"
+    def generate_route_name(self, flow_direction):
+        direction = "P" if flow_direction=="parts" else "E"
+        trip_type = "R" if self.has_empties_flow else "S"
+        return f"GD_{self.name} #{direction}{trip_type}"
 
     def to_dataframe(self):
         rows = []
@@ -102,6 +145,7 @@ class Hub:
         first_hub_row = True
 
         for route in routes:
+            route_name = self.generate_route_name("parts")
             shipper = route.demand.shipper
             sellers = sorted(
                 shipper.sellers,
@@ -112,7 +156,7 @@ class Hub:
 
             for seller in sellers:
                 route_row = {
-                    'Route name': self.generate_route_name(),
+                    'Route name': route_name,
                     'HUB Name': self.name,
                     'Shipper COFOR': shipper.cofor,
                     'Seller COFOR': seller.cofor,

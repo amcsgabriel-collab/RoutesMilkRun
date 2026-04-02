@@ -1,4 +1,5 @@
 import copy
+from abc import abstractmethod, ABCMeta
 from math import ceil
 
 from domain.data_structures import Vehicle, Carrier
@@ -9,7 +10,8 @@ def _safe_div(numerator, denominator):
         return 0.0
     return numerator / denominator
 
-class Route:
+
+class Route(metaclass=ABCMeta):
     METRICS = (
         ("weight", "weight_capacity"),
         ("volume", "volume_capacity"),
@@ -17,6 +19,7 @@ class Route:
     )
 
     def __init__(self, vehicle: Vehicle, demand, costing):
+        super.__init__(self)
         self.vehicle = vehicle
         self.demand = demand
         self.costing = costing
@@ -58,6 +61,23 @@ class Route:
         return self.demand.carrier
 
     @property
+    def starting_point(self):
+        return self.demand.starting_point
+
+    @abstractmethod
+    @property
+    def destination(self):
+        pass
+
+    @property
+    def commercial_origin(self):
+        return self.starting_point if self.demand.flow_type == "parts" else self.destination
+
+    @property
+    def commercial_destination(self):
+        return self.destination if self.demand.flow_type == "parts" else self.starting_point
+
+    @property
     def weight(self):
         return self.demand.weight
 
@@ -92,6 +112,13 @@ class Route:
     @property
     def tariff_key_bundle(self):
         full_key = self.costing.build_tariff_key(self)
+        if self.demand.flow_type == "parts":
+            return [
+                ("zip", self.costing.build_tariff_key(self, 2)[:4]), # By zip + country, 2 digits only
+                ("zip", self.costing.build_tariff_key(self, 3)[:4]), # By zip + country, 3 digits
+                ("zip", self.costing.build_tariff_key(self, 5)[:4]), # By zip + country, all 5 digits
+                ("cofor", full_key[:3] + (full_key[4],)), # Finally, by COFOR.
+            ]
         return [
             ("zip", self.costing.build_tariff_key(self, 2)[:4]), # By zip + country, 2 digits only
             ("zip", self.costing.build_tariff_key(self, 3)[:4]), # By zip + country, 3 digits
@@ -106,3 +133,9 @@ class Route:
     @property
     def total_cost(self):
         return self.route_cost * self.frequency
+
+    @abstractmethod
+    def export_dataframe(self, *args, **kwargs):
+        pass
+
+

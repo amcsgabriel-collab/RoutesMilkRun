@@ -9,7 +9,8 @@ def ftl_tariffs_from_dataframe(tariffs_dataframe: pd.DataFrame) -> dict[tuple[st
             row['Carrier Short Name'],
             row['Means of Transport'],
             row['Deviation Bucket'],
-            row['Origin Code']
+            row['Trip Type'],
+            row['Origin Code'],
         ): FtlTariff(
             base_cost=row['Base Cost'],
             stop_cost=row['Stop Cost'],

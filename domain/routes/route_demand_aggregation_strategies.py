@@ -4,20 +4,24 @@ from domain.shipper import Shipper
 
 
 class HubAggregateDemand:
-    def __init__(self, hub):
+    def __init__(self, hub, flow_type):
         self.hub = hub
+        self.flow_type = flow_type
+
+    def _demand(self, shipper):
+        return shipper.parts_demand if self.flow_type == "parts" else shipper.empties_demand
 
     @property
     def weight(self):
-        return sum(s.weight for s in self.hub.shippers)
+        return sum(self._demand(s).weight for s in self.hub.shippers)
 
     @property
     def volume(self):
-        return sum(s.volume for s in self.hub.shippers)
+        return sum(self._demand(s).volume for s in self.hub.shippers)
 
     @property
     def loading_meters(self):
-        return sum(s.loading_meters for s in self.hub.shippers)
+        return sum(self._demand(s).loading_meters for s in self.hub.shippers)
 
     @property
     def carrier(self):
@@ -30,6 +34,10 @@ class HubAggregateDemand:
     @property
     def starting_point(self):
         return self.hub
+
+    @property
+    def destination(self):
+        return self.plant
 
     @property
     def deviation(self):
@@ -45,8 +53,9 @@ class HubAggregateDemand:
 
 
 class MilkrunPatternDemand:
-    def __init__(self, pattern: RoutePattern):
+    def __init__(self, pattern: RoutePattern, flow_type: str):
         self.pattern = pattern
+        self.flow_type = flow_type
 
     @property
     def weight(self):
@@ -73,6 +82,10 @@ class MilkrunPatternDemand:
         return self.pattern.starting_point
 
     @property
+    def destination(self):
+        return self.plant
+
+    @property
     def count_of_stops(self):
         return self.pattern.count_of_stops
 
@@ -86,22 +99,27 @@ class MilkrunPatternDemand:
 
 
 class ShipperDemand:
-    def __init__(self, shipper: Shipper, plant: Plant, carrier: Carrier):
+    def __init__(self, shipper: Shipper, plant: Plant, carrier: Carrier, flow_type: str):
         self.shipper = shipper
         self._plant = plant
         self._carrier = carrier
+        self.flow_type = flow_type
+
+    @property
+    def _demand(self):
+        return self.shipper.parts_demand if self.flow_type == "parts" else self.shipper.empties_demand
 
     @property
     def weight(self):
-        return self.shipper.weight
+        return self._demand.weight
 
     @property
     def volume(self):
-        return self.shipper.volume
+        return self._demand.volume
 
     @property
     def loading_meters(self):
-        return self.shipper.loading_meters
+        return self._demand.loading_meters
 
     @property
     def carrier(self):

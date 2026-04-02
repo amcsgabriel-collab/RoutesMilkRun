@@ -29,8 +29,11 @@ class Scenario:
     hubs: set[Hub] = field(default_factory=set)
     draft_hubs: set[Hub] = field(default_factory=set)
 
-    routes: Set[DirectRoute] = field(default_factory=set)
-    draft_routes: Set[DirectRoute] = field(default_factory=set)
+    part_routes: Set[DirectRoute] = field(default_factory=set)
+    empty_routes: Set[DirectRoute] = field(default_factory=set)
+    draft_part_routes: Set[DirectRoute] = field(default_factory=set)
+    draft_empty_routes: Set[DirectRoute] = field(default_factory=set)
+
     lock_block_available_routes: list[DirectRoute] = field(default_factory=list)
     blocked_routes: list[DirectRoute] = field(default_factory=list)
     locked_routes: list[DirectRoute] = field(default_factory=list)
@@ -42,13 +45,20 @@ class Scenario:
     def copy(self):
         return copy.deepcopy(self)
 
-    def get_in_use_routes(self):
-        if self.draft_routes:
-            return self.draft_routes
+    def get_in_use_routes(self, flow_direction: str) -> set[DirectRoute]:
+        """ Get draft routes if they exist, else get saved routes. """
+        draft_routes = self.draft_part_routes if flow_direction == "parts" else self.draft_empty_routes
+        routes = self.part_routes if flow_direction == "parts" else self.empty_routes
+        if draft_routes:
+            return draft_routes
         else:
-            return self.routes
+            return routes
+
+    def get_all_in_use_routes(self):
+        return self.get_in_use_routes("parts") | self.get_in_use_routes("empties")
 
     def get_in_use_hubs(self):
+        """ Get draft hubs if they exist, else get saved hubs. """
         if self.draft_hubs:
             return self.draft_hubs
         else:
@@ -57,7 +67,7 @@ class Scenario:
     def refresh_lock_block_available_routes(self):
         self.lock_block_available_routes = [
             route
-            for route in self.get_in_use_routes()
+            for route in self.get_all_in_use_routes()
             if route not in self.locked_routes
                and route not in self.blocked_routes
         ]
@@ -65,7 +75,7 @@ class Scenario:
 
     def find_route(self, route_shippers_key):
         for r in self.get_in_use_routes():
-            if r.pattern.shippers_key == route_shippers_key:
+            if r.demand.pattern.shippers_key == route_shippers_key:
                 return r
         return None
 
@@ -92,7 +102,7 @@ class Scenario:
         """ COFOR Keyed dictionary of shippers currently in direct routes."""
         return {shipper.cofor: shipper
                 for route in self.get_in_use_routes()
-                for shipper in route.pattern.shippers}
+                for shipper in route.demand.pattern.shippers}
 
     @property
     def hub_shippers(self):
@@ -103,7 +113,7 @@ class Scenario:
 
     @property
     def locked_shippers(self):
-        return [s for route in self.locked_routes for s in route.pattern.shippers]
+        return [s for route in self.locked_routes for s in route.demand.pattern.shippers]
 
     @property
     def unlocked_shippers(self):
@@ -132,7 +142,7 @@ class Scenario:
         """ Finds the DirectRoute object that contains a shipper. """
         routes = []
         for route in self.get_in_use_routes():
-            if shipper in route.pattern.shippers:
+            if shipper in route.demand.pattern.shippers:
                 routes.append(route)
         if routes:
             return routes
@@ -149,7 +159,7 @@ class Scenario:
         routes = self.get_in_use_routes()
         if concept is None:
             return set(routes)
-        return {r for r in routes if r.pattern.transport_concept == concept}
+        return {r for r in routes if r.demand.pattern.transport_concept == concept}
 
     @staticmethod
     def _route_total_cost(routes: Iterable[Route]) -> float:
