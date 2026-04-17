@@ -4,6 +4,7 @@ import pandas as pd
 
 from domain.general_algorithms import decimal_to_dms_str
 from domain.data_structures import Carrier, Vehicle, Plant
+from domain.kpi_set import KPISet
 from domain.routes.first_leg_route import FirstLegRoute
 from domain.routes.linehaul_route import LinehaulRoute
 from domain.shipper import Shipper
@@ -274,3 +275,62 @@ class Hub:
             )
 
         return pd.DataFrame(rows)
+
+    @staticmethod
+    def _sum_route_cost(routes) -> float:
+        return sum(route.total_cost for route in routes)
+
+    @staticmethod
+    def _route_kpis(route) -> KPISet:
+        return KPISet(
+            total_cost=route.total_cost,
+            trucks=route.frequency,
+            utilization_numerator=route.max_utilization * route.frequency,
+            weight=route.weight,
+            volume=route.volume,
+            loading_meters=route.loading_meters,
+        )
+
+    @property
+    def hub_parts_first_leg_kpis(self) -> KPISet:
+        return KPISet(
+            total_cost=self._sum_route_cost(self.parts_first_leg_routes),
+        )
+
+    @property
+    def hub_empties_first_leg_kpis(self) -> KPISet:
+        if not self.has_empties_flow:
+            return KPISet()
+        return KPISet(
+            total_cost=self._sum_route_cost(self.empties_first_leg_routes),
+        )
+
+    @property
+    def hub_all_first_leg_kpis(self) -> KPISet:
+        return self.hub_parts_first_leg_kpis + self.hub_empties_first_leg_kpis
+
+    @property
+    def hub_parts_linehaul_kpis(self) -> KPISet:
+        return self._route_kpis(self.parts_linehaul_route)
+
+    @property
+    def hub_empties_linehaul_kpis(self) -> KPISet:
+        if not self.has_empties_flow:
+            return KPISet()
+        return self._route_kpis(self.empties_linehaul_route)
+
+    @property
+    def hub_all_linehaul_kpis(self) -> KPISet:
+        return self.hub_parts_linehaul_kpis + self.hub_empties_linehaul_kpis
+
+    @property
+    def hub_parts_kpis(self) -> KPISet:
+        return self.hub_parts_first_leg_kpis + self.hub_parts_linehaul_kpis
+
+    @property
+    def hub_empties_kpis(self) -> KPISet:
+        return self.hub_empties_first_leg_kpis + self.hub_empties_linehaul_kpis
+
+    @property
+    def hub_all_kpis(self) -> KPISet:
+        return self.hub_parts_kpis + self.hub_empties_kpis

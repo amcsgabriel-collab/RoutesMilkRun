@@ -69,11 +69,6 @@ class DirectRoute(Route):
             if self.demand.pattern.is_new_pattern \
             else self.demand.pattern.route_name
 
-    def generate_tour_name(self):
-        return f"FT_{self.demand.pattern.starting_point.cofor}_{self.demand.pattern.plant.cofor}#PS" \
-            if self.demand.pattern.transport_concept == "FTL" \
-            else f"M{self.demand.pattern.mr_cluster}_{self.demand.pattern.starting_point.cofor}_{self.demand.pattern.plant.cofor}#PS"
-
     def export_dataframe(self, tour_name:str, roundtrip_id:str, frequency: int) -> pd.DataFrame:
         rows = []
         shippers = sorted(
@@ -132,7 +127,7 @@ class DirectRoute(Route):
                     'Pick Fri': '',
                     'Pick Sat': '',
                     'Pick Sun': '',
-                    'Frequency / week': self.frequency,
+                    'Frequency / week': frequency,
                     'DEL Mon': '',
                     'DEL Tue': '',
                     'DEL Wed': '',

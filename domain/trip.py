@@ -71,12 +71,12 @@ class Trip:
         else:
             return "N/D"
 
-    def _build_route_key(self, route: Route) -> str:
+    def _build_tour_key(self, route: Route) -> str:
         prefix = route.demand.pattern.mr_cluster if route.demand.pattern.transport_concept == "MR" else "FT"
         route_name = route.demand.pattern.get_name(self.roundtrip_id) \
             if route.demand.pattern.is_new_pattern \
             else route.demand.pattern.route_name.split("/")[0]
-        suffix = f"#{route.demand.flow_direction}{self.classification}"
+        suffix = f"#{route.demand.flow_direction[0].upper()}{self.classification}"
         return f"{prefix}_{route_name}{suffix}"
 
     def export_dataframe(self) -> pd.DataFrame:
@@ -84,7 +84,7 @@ class Trip:
         if self.parts_route is not None:
             frames.append(
                 self.parts_route.export_dataframe(
-                    tour_name=self._build_route_key(self.parts_route),
+                    tour_name=self._build_tour_key(self.parts_route),
                     roundtrip_id=self.roundtrip_id,
                     frequency=self.frequency,
                 )
@@ -92,7 +92,7 @@ class Trip:
         if self.empties_route is not None:
             frames.append(
                 self.empties_route.export_dataframe(
-                    tour_name=self._build_route_key(self.empties_route),
+                    tour_name=self._build_tour_key(self.empties_route),
                     roundtrip_id=self.roundtrip_id,
                     frequency=self.frequency,
                 )

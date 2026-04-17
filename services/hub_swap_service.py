@@ -190,38 +190,39 @@ class HubSwapService:
                 route.demand.pattern.shipper_allocation[shipper] = current / total_allocation
 
     @staticmethod
-    def _add_shipper_to_hub(project: Project, shipper: Shipper, hub: Hub) -> None:
+    def _add_shipper_to_hub(project: Project, shipper: Shipper, hub) -> None:
         """
         Add shipper to the assigned Hub, creating new first leg route(s), already priced.
         :param project: Current Project.
         :param shipper: Shipper to be added to the Hub.
-        :param hub: Hub to which shipper was assigned.
+        :param hub: Hub or RegionalHubView to which shipper was assigned.
         """
-        if shipper not in hub.shippers:
-            hub.shippers.append(shipper)
+        core_hub = getattr(hub, "core_hub", hub)
+
+        if shipper not in core_hub.shippers:
+            core_hub.shippers.append(shipper)
 
         if shipper.has_parts_demand:
             new_parts_first_leg = FirstLegRoute(
                 shipper=shipper,
-                carrier=hub.first_leg_carrier,
-                vehicle=hub.first_leg_vehicle,
-                hub=hub,
+                carrier=core_hub.first_leg_carrier,
+                vehicle=core_hub.first_leg_vehicle,
+                hub=core_hub,
                 flow_direction="parts",
             )
             project.context.tariffs_service.assign_ltl_route(new_parts_first_leg)
-            hub.parts_first_leg_routes.add(new_parts_first_leg)
+            core_hub.parts_first_leg_routes.add(new_parts_first_leg)
 
-        if hub.has_empties_flow and shipper.has_empties_demand:
+        if core_hub.has_empties_flow and shipper.has_empties_demand:
             new_empties_first_leg = FirstLegRoute(
                 shipper=shipper,
-                carrier=hub.first_leg_carrier,
-                vehicle=hub.first_leg_vehicle,
-                hub=hub,
+                carrier=core_hub.first_leg_carrier,
+                vehicle=core_hub.first_leg_vehicle,
+                hub=core_hub,
                 flow_direction="empties",
             )
             project.context.tariffs_service.assign_ltl_route(new_empties_first_leg)
-            hub.empties_first_leg_routes.add(new_empties_first_leg)
-
+            core_hub.empties_first_leg_routes.add(new_empties_first_leg)
 
     def move_hub_shippers_to_direct(self, project: Project, cofors: list[str]) -> list[str]:
         """
@@ -231,33 +232,41 @@ class HubSwapService:
         """
         scenario = project.current_scenario
         failed_to_move = []
+
         for cofor in cofors:
             shipper = scenario.hub_shippers[cofor]
             hub = scenario.find_shipper_hub(shipper)
-            ok = self._add_shipper_to_direct_network(project, shipper, add_empties=hub.has_empties_flow)
+            core_hub = self._resolve_core_hub(hub)
+
+            ok = self._add_shipper_to_direct_network(
+                project,
+                shipper,
+                add_empties=core_hub.has_empties_flow,
+            )
             if not ok:
                 failed_to_move.append(cofor)
                 continue
 
             self._remove_shipper_from_hub(project, shipper)
-        return failed_to_move
 
+        return failed_to_move
 
     @staticmethod
     def _remove_shipper_from_hub(project: Project, shipper: Shipper) -> None:
         """
         Removes the selected shipper from whichever Hub it belongs to in current scenario.
-        :param project: Current Project.
-        :param shipper: Shipper to be moved.
+        Mutates the canonical hub object, not the regional view.
         """
         scenario = project.current_scenario
         hub = scenario.find_shipper_hub(shipper)
-        hub.shippers.remove(shipper)
-        hub.parts_first_leg_routes = {
-            r for r in hub.parts_first_leg_routes if r.shipper != shipper
+        core_hub = getattr(hub, "core_hub", hub)
+
+        core_hub.shippers.remove(shipper)
+        core_hub.parts_first_leg_routes = {
+            r for r in core_hub.parts_first_leg_routes if r.shipper != shipper
         }
-        hub.empties_first_leg_routes = {
-            r for r in hub.empties_first_leg_routes if r.shipper != shipper
+        core_hub.empties_first_leg_routes = {
+            r for r in core_hub.empties_first_leg_routes if r.shipper != shipper
         }
 
     @staticmethod
@@ -316,12 +325,11 @@ class HubSwapService:
         )
         return True
 
-
-    def _prepare_hub_helper(self, plant_name: str, hubs: list[Hub]) -> None:
+    def _prepare_hub_helper(self, plant_name: str, hubs) -> None:
         """
         Prepares the "hub helper" database, that contains RFQs that help assign hubs to shippers.
         :param plant_name: Name of the plant of the current project.
-        :param hubs: List of available Hubs for current scenario.
+        :param hubs: Available hubs for current scenario. Can be Hub or RegionalHubView.
         """
         data_loader = DataLoader(get_helper_path())
         hub_helper = data_loader.load_excel('hubs', 'Data_for XPCD')
@@ -332,9 +340,7 @@ class HubSwapService:
             "HUB_ID": "HUB cofor",
             "country_2digit": "Zip Key",
             "2-digit_ZIP": "Zip2",
-        },
-            inplace=True
-        )
+        }, inplace=True)
         hub_helper["Zip Key"] = (
             hub_helper["Zip Key"]
             .astype(str)
@@ -343,19 +349,24 @@ class HubSwapService:
         )
         hub_helper["Country"] = hub_helper["Zip Key"].str[:2]
         hub_helper = hub_helper.drop_duplicates()
-        hubs_by_cofor = {hub.cofor: hub for hub in hubs}
+
+        hubs_by_cofor = {
+            self._resolve_core_hub(hub).cofor: self._resolve_core_hub(hub)
+            for hub in hubs
+        }
+
         self.hub_helper = hub_helper
         self.hubs_by_zip_key = self.get_hubs_by_zipkey(hubs_by_cofor)
         self.hubs_by_country = self.get_hubs_by_country(hubs_by_cofor)
 
-    def _assign_hub_to_shipper(
-            self,
-            shipper: Shipper,
-    ) -> Hub:
+    @staticmethod
+    def _resolve_core_hub(hub) -> Hub:
+        return getattr(hub, "core_hub", hub)
+
+    def _assign_hub_to_shipper(self, shipper: Shipper) -> Hub:
         """
-        Assigns shipper to one of currently available Hubs, based on zip code or country, depending on RFQ rules.
-        :param shipper: Shipper to be assigned.
-        :return: Hub to which shipper was assigned.
+        Assigns shipper to one of currently available canonical Hubs,
+        based on zip code or country, depending on RFQ rules.
         """
         hub = self.hubs_by_zip_key.get(shipper.zip_key(2)) or self.hubs_by_country.get(shipper.country[:2])
         return hub

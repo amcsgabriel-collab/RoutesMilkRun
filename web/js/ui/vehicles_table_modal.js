@@ -1,6 +1,6 @@
 import { loadHtml, escapeHtml } from "../utils.js";
 import { openModal, closeModal } from "./modal.js";
-import { apiGet, apiPost } from "../api.js";
+import { apiGet, apiPost, apiDelete } from "../api.js";
 
 // public export
 export async function openVehiclesModal() {
@@ -58,14 +58,14 @@ function getSelectedVehicleIds() {
 
 async function deleteSelectedVehicles() {
   const ids_to_delete = getSelectedVehicleIds();
-  if (!ids.length) return;
+  if (!ids_to_delete.length) return;
 
   await apiDelete("/api/vehicles", ids_to_delete);
   await loadAndRenderVehicles();
 }
 
 async function openAddVehicleModal() {
-  const html = await loadHtml("../views_html/vehicle_add_modal.html");
+  const html = await loadHtml("../views_html/vehicles_add_modal.html");
   openModal(html);
   wireAddVehicleModal();
 }

@@ -384,15 +384,18 @@ def api_vehicles():
 def api_vehicles_add(data):
     new_vehicle = data.get("new_vehicle")
     pm.project.context.vehicles.append(new_vehicle)
+    return success()
 
 @app.delete("/api/vehicles")
 @with_pm_lock
 @json_endpoint
 def api_vehicles_delete(data):
-    ids_to_delete = data.get("ids_to_delete")
+    ids_to_delete = data
     for id in ids_to_delete:
         vehicle = pm.project.get_vehicle_by_id(id)
         pm.project.context.vehicles.remove(vehicle)
+
+    return success()
 
 # ----------------------------------------------------
 # Map HTML

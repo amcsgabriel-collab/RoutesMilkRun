@@ -21,7 +21,7 @@ from collections import defaultdict
 
 import pulp
 
-from domain.domain_algorithms import make_haversine_cache, get_deviation_bin
+from domain.domain_algorithms import make_haversine_cache
 from domain.data_structures import Plant
 from domain.exceptions import NonOptimalSolutionError
 from domain.project import Project
@@ -37,6 +37,7 @@ from services.vehicle_permutation_service import VehiclePermutationService
 
 def _group_key(route: DirectRoute) -> tuple:
     return route.carrier.group, route.vehicle.id, route.starting_point.zip_code
+
 
 class Solver:
     def __init__(
@@ -131,10 +132,13 @@ class Solver:
         self.solution_trips = iterate_trip_combination(
             selected_parts_by_group=selected_parts_by_group,
             selected_empties_by_group=selected_empties_by_group,
+            pair_allocations=self.mr_solver.solution_pair_allocations if self.mr_solver else {},
         )
 
 
 class MilkRunSolver:
+    MAX_PARTNERS_PER_ROUTE = 5
+
     def __init__(
             self,
             parts_shippers: set[Shipper],
@@ -177,17 +181,24 @@ class MilkRunSolver:
         self.parts_routes: set[DirectRoute] = set()
         self.empties_routes: set[DirectRoute] = set()
 
-        self.roundtrip_groups: list[tuple] = []
         self.parts_routes_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
         self.empties_routes_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
-        self.roundtrip_saving_by_group: dict[tuple, int] = defaultdict(int)
+
+        self.feasible_pair_allocations: list[tuple[DirectRoute, DirectRoute]] = []
+        self.pair_saving_per_frequency: dict[tuple[DirectRoute, DirectRoute], float] = {}
+        self.pairs_by_parts_route: dict[DirectRoute, list[tuple[DirectRoute, DirectRoute]]] = defaultdict(list)
+        self.pairs_by_empties_route: dict[DirectRoute, list[tuple[DirectRoute, DirectRoute]]] = defaultdict(list)
+
+        self.route_frequency: dict[DirectRoute, int] = {}
+        self.route_total_cost: dict[DirectRoute, float] = {}
+        self.route_roundtrip_total_cost: dict[DirectRoute, float] = {}
+
+        self.pair_frequency = None
+        self.solution_pair_allocations: dict[tuple[DirectRoute, DirectRoute], int] = {}
 
         self.model = None
         self.use_parts_route_bin = None
         self.use_empties_route_bin = None
-        self.roundtrips_by_group = None
-        self.fixed_parts_frequency_by_group = None
-        self.fixed_empties_frequency_by_group = None
 
         self.solve_status = "Not Solved Yet"
         self.solution_parts_routes = set()
@@ -196,20 +207,9 @@ class MilkRunSolver:
 
     @property
     def all_patterns(self):
-        """
-        Return the union of all generated route patterns across both flows.
-        """
         return self.parts_patterns.union(self.empties_patterns)
 
     def build(self):
-        """
-        Prepare the optimization model and all candidate inputs.
-
-        This method generates route patterns, applies ordering and deviation
-        filtering, expands patterns into operational routes, assigns tariffs,
-        computes roundtrip savings by group, and builds the MILP model used in
-        `solve()`.
-        """
         self.generate_route_patterns()
         self.apply_ordering_to_route_patterns()
         self.remove_high_deviation_route_patterns()
@@ -223,42 +223,18 @@ class MilkRunSolver:
         self.empties_routes = {r for r in new_empties_routes if r.total_cost > 0}
 
         for r in self.parts_routes:
-            key = (r.carrier.group, r.vehicle.id, r.starting_point.zip_code)
-            self.parts_routes_by_group[key].append(r)
+            self.parts_routes_by_group[_group_key(r)].append(r)
 
         for r in self.empties_routes:
-            key = (r.carrier.group, r.vehicle.id, r.starting_point.zip_code)
-            self.empties_routes_by_group[key].append(r)
+            self.empties_routes_by_group[_group_key(r)].append(r)
 
-        fixed_groups = {
-            _group_key(r) for r in (self.fixed_parts_routes | self.fixed_empties_routes)
-        }
-        self.roundtrip_groups = (
-                set(self.parts_routes_by_group.keys())
-                | set(self.empties_routes_by_group.keys())
-                | fixed_groups
-        )
-
-        self.get_roundtrip_savings_by_group()
-        self.fixed_parts_frequency_by_group = defaultdict(int)
-        for r in self.fixed_parts_routes:
-            self.fixed_parts_frequency_by_group[_group_key(r)] += r.frequency
-
-        self.fixed_empties_frequency_by_group = defaultdict(int)
-        for r in self.fixed_empties_routes:
-            self.fixed_empties_frequency_by_group[_group_key(r)] += r.frequency
-
-
+        self.build_route_caches()
+        self.remove_dominated_routes()
+        self.rebuild_route_group_indexes()
+        self.build_feasible_pair_allocations()
         self.build_model()
 
     def solve(self):
-        """
-        Solve the prepared optimization model and convert the result into trips.
-
-        The solver first selects parts and empties routes through the MILP,
-        converts the active binary variables into route sets, and then combines
-        those routes into operational trips with roundtrip pairing where possible.
-        """
         self.solve_model()
         self.convert_solutions()
 
@@ -313,25 +289,12 @@ class MilkRunSolver:
             )
 
     def apply_ordering_to_route_patterns(self):
-        """
-        Order shipper visits and compute deviation for all patterns.
-
-        A cached haversine distance function is used so the same distance
-        calculation can be reused across multiple patterns efficiently.
-        """
         distance_function = make_haversine_cache()
         for pattern in self.all_patterns:
             pattern.order_shippers(distance_function)
             pattern.calculate_deviation(distance_function)
 
     def remove_high_deviation_route_patterns(self):
-        """
-        Remove patterns whose deviation exceeds the accepted threshold.
-
-        This reduces the number of candidate routes before vehicle permutation
-        and optimization, pruning patterns considered operationally undesirable.
-        The current threshold is 150.
-        """
         parts_patterns_to_remove = {p for p in self.parts_patterns if p.deviation > 150}
         for pattern in parts_patterns_to_remove:
             self.parts_patterns.remove(pattern)
@@ -340,45 +303,158 @@ class MilkRunSolver:
         for pattern in empties_patterns_to_remove:
             self.empties_patterns.remove(pattern)
 
-    def get_roundtrip_savings_by_group(self):
-        """
-        Load roundtrip savings for each eligible operational group.
+    def build_route_caches(self):
+        self.route_frequency.clear()
+        self.route_total_cost.clear()
+        self.route_roundtrip_total_cost.clear()
 
-        Savings are looked up from FTL tariffs using a grouping key composed of
-        carrier group, vehicle, deviation bin, route origin zip code, and plant.
-        If no tariff is found for a group, no savings are applied for that group.
-        """
-        tariffs_dict = self.tariffs_service.ftl_tariffs
-        for group in self.roundtrip_groups:
-            tariff = tariffs_dict.get(
-                (group[0], group[1], get_deviation_bin(35)[0], group[2], self.plant.cofor)
+        all_routes = (
+            self.parts_routes
+            | self.empties_routes
+            | self.fixed_parts_routes
+            | self.fixed_empties_routes
+        )
+
+        for route in all_routes:
+            self.route_frequency[route] = int(route.frequency)
+            self.route_total_cost[route] = route.total_cost
+            self.route_roundtrip_total_cost[route] = route.roundtrip_total_cost
+
+    def rebuild_route_group_indexes(self):
+        self.parts_routes_by_group = defaultdict(list)
+        self.empties_routes_by_group = defaultdict(list)
+
+        for r in self.parts_routes:
+            self.parts_routes_by_group[_group_key(r)].append(r)
+
+        for r in self.empties_routes:
+            self.empties_routes_by_group[_group_key(r)].append(r)
+
+    def remove_dominated_routes(self):
+        self.parts_routes = self._remove_dominated_route_set(self.parts_routes)
+        self.empties_routes = self._remove_dominated_route_set(self.empties_routes)
+
+        filtered_cache_keys = (
+            self.parts_routes
+            | self.empties_routes
+            | self.fixed_parts_routes
+            | self.fixed_empties_routes
+        )
+        self.route_frequency = {
+            route: value for route, value in self.route_frequency.items()
+            if route in filtered_cache_keys
+        }
+        self.route_total_cost = {
+            route: value for route, value in self.route_total_cost.items()
+            if route in filtered_cache_keys
+        }
+        self.route_roundtrip_total_cost = {
+            route: value for route, value in self.route_roundtrip_total_cost.items()
+            if route in filtered_cache_keys
+        }
+
+    def _remove_dominated_route_set(self, routes: set[DirectRoute]) -> set[DirectRoute]:
+        routes_by_signature: dict[tuple, list[DirectRoute]] = defaultdict(list)
+        kept_routes = set()
+
+        for route in routes:
+            signature = (
+                frozenset(route.demand.pattern.shippers),
+                route.vehicle.id,
+                route.starting_point.zip_code,
+                route.demand.flow_direction,
             )
-            if tariff:
-                self.roundtrip_saving_by_group[group] = tariff.get_roundtrip_savings()
+            routes_by_signature[signature].append(route)
+
+        for same_signature_routes in routes_by_signature.values():
+            best_route = min(
+                same_signature_routes,
+                key=lambda r: (
+                    self.route_total_cost[r],
+                    self.route_roundtrip_total_cost[r],
+                    self.route_frequency[r],
+                    hash(r),
+                )
+            )
+            kept_routes.add(best_route)
+
+        return kept_routes
+
+    def _unit_cost(self, route: DirectRoute, *, is_roundtrip: bool) -> float:
+        freq = self.route_frequency[route]
+        if freq == 0:
+            return 0.0
+        total = (
+            self.route_roundtrip_total_cost[route]
+            if is_roundtrip
+            else self.route_total_cost[route]
+        )
+        return total / freq
+
+    def _pair_saving_per_frequency(
+            self,
+            parts_route: DirectRoute,
+            empties_route: DirectRoute,
+    ) -> float:
+        single_cost = (
+            self._unit_cost(parts_route, is_roundtrip=False)
+            + self._unit_cost(empties_route, is_roundtrip=False)
+        )
+        roundtrip_cost = (
+            self._unit_cost(parts_route, is_roundtrip=True)
+            + self._unit_cost(empties_route, is_roundtrip=True)
+        )
+        return max(0.0, single_cost - roundtrip_cost)
+
+    def build_feasible_pair_allocations(self):
+        all_parts_routes = self.parts_routes | self.fixed_parts_routes
+        all_empties_routes = self.empties_routes | self.fixed_empties_routes
+
+        self.feasible_pair_allocations = []
+        self.pair_saving_per_frequency = {}
+        self.pairs_by_parts_route.clear()
+        self.pairs_by_empties_route.clear()
+
+        parts_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
+        empties_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
+
+        for route in all_parts_routes:
+            parts_by_group[_group_key(route)].append(route)
+
+        for route in all_empties_routes:
+            empties_by_group[_group_key(route)].append(route)
+
+        for group in set(parts_by_group) & set(empties_by_group):
+            for parts_route in parts_by_group[group]:
+                candidates = []
+
+                for empties_route in empties_by_group[group]:
+                    if (
+                        parts_route in self.fixed_parts_routes
+                        and empties_route in self.fixed_empties_routes
+                    ):
+                        continue
+
+                    saving = self._pair_saving_per_frequency(parts_route, empties_route)
+                    if saving <= 0:
+                        continue
+
+                    candidates.append((saving, empties_route))
+
+                candidates.sort(key=lambda x: x[0], reverse=True)
+
+                for saving, empties_route in candidates[:self.MAX_PARTNERS_PER_ROUTE]:
+                    pair = (parts_route, empties_route)
+
+                    if pair in self.pair_saving_per_frequency:
+                        continue
+
+                    self.feasible_pair_allocations.append(pair)
+                    self.pair_saving_per_frequency[pair] = saving
+                    self.pairs_by_parts_route[parts_route].append(pair)
+                    self.pairs_by_empties_route[empties_route].append(pair)
 
     def build_model(self):
-        """
-        Build the mixed-integer optimization model.
-
-        Decision variables:
-            use_parts_route_bin[route]:
-                1 if a parts route is selected, 0 otherwise.
-            use_empties_route_bin[route]:
-                1 if an empties route is selected, 0 otherwise.
-            roundtrips_by_group[group]:
-                Integer number of roundtrips allocated to an operational group.
-
-        Objective:
-            Minimize total selected route cost minus roundtrip savings.
-
-        Constraints:
-            - Every parts shipper must be covered by exactly one selected parts route.
-            - Every empties shipper must be covered by exactly one selected empties route.
-            - Roundtrips allocated to a group cannot exceed selected parts frequency
-              for that group.
-            - Roundtrips allocated to a group cannot exceed selected empties
-              frequency for that group.
-        """
         self.model = pulp.LpProblem("Atomic_Route_Allocation", pulp.LpMinimize)
 
         self.use_parts_route_bin = pulp.LpVariable.dicts(
@@ -393,80 +469,83 @@ class MilkRunSolver:
             cat="Binary"
         )
 
-        self.roundtrips_by_group = pulp.LpVariable.dicts(
-            name="roundtrips_by_group",
-            indices=list(self.roundtrip_groups),
+        self.pair_frequency = pulp.LpVariable.dicts(
+            name="pair_frequency",
+            indices=self.feasible_pair_allocations,
             lowBound=0,
-            cat="Integer"
+            cat="Integer",
         )
-
-        max_rt_cost = max(
-            [r.roundtrip_total_cost for r in self.parts_routes | self.empties_routes],
-            default=0,
-        )
-
-        epsilon = 1.0 / (1000 * (1 + max_rt_cost))
 
         self.model += (
-                pulp.lpSum(
-                    (r.total_cost + epsilon * r.roundtrip_total_cost) * self.use_parts_route_bin[r]
-                    for r in self.parts_routes
-                )
-                + pulp.lpSum(
-            (r.total_cost + epsilon * r.roundtrip_total_cost) * self.use_empties_route_bin[r]
-            for r in self.empties_routes
-        )
-                - pulp.lpSum(
-            self.roundtrip_saving_by_group[g] * self.roundtrips_by_group[g]
-            for g in self.roundtrip_groups
-        )
+            pulp.lpSum(
+                self.route_total_cost[r] * self.use_parts_route_bin[r]
+                for r in self.parts_routes
+            )
+            + pulp.lpSum(
+                self.route_total_cost[r] * self.use_empties_route_bin[r]
+                for r in self.empties_routes
+            )
+            - pulp.lpSum(
+                self.pair_saving_per_frequency[pair] * self.pair_frequency[pair]
+                for pair in self.feasible_pair_allocations
+            )
         )
 
         for shipper in self.parts_shippers:
             self.model += (
-                    pulp.lpSum(
-                        self.use_parts_route_bin[route]
-                        for route in self.parts_routes
-                        if shipper in route.demand.pattern.shippers
-                    ) == 1
+                pulp.lpSum(
+                    self.use_parts_route_bin[route]
+                    for route in self.parts_routes
+                    if shipper in route.demand.pattern.shippers
+                ) == 1
             )
 
         for shipper in self.empties_shippers:
             self.model += (
-                    pulp.lpSum(
-                        self.use_empties_route_bin[route]
-                        for route in self.empties_routes
-                        if shipper in route.demand.pattern.shippers
-                    ) == 1
+                pulp.lpSum(
+                    self.use_empties_route_bin[route]
+                    for route in self.empties_routes
+                    if shipper in route.demand.pattern.shippers
+                ) == 1
             )
 
-        for group in self.roundtrip_groups:
+        for parts_route in self.parts_routes:
             self.model += (
-                    self.roundtrips_by_group[group]
-                    <= self.fixed_parts_frequency_by_group.get(group, 0)
-                    + pulp.lpSum(
-                r.frequency * self.use_parts_route_bin[r]
-                for r in self.parts_routes_by_group.get(group, [])
-            )
-            ), f"roundtrip_parts_cap_{group[0]}_{group[1]}_{group[2]}"
+                pulp.lpSum(
+                    self.pair_frequency[pair]
+                    for pair in self.pairs_by_parts_route.get(parts_route, [])
+                )
+                <= self.route_frequency[parts_route] * self.use_parts_route_bin[parts_route]
+            ), f"pair_cap_parts_{hash(parts_route)}"
 
+        for empties_route in self.empties_routes:
             self.model += (
-                    self.roundtrips_by_group[group]
-                    <= self.fixed_empties_frequency_by_group.get(group, 0)
-                    + pulp.lpSum(
-                r.frequency * self.use_empties_route_bin[r]
-                for r in self.empties_routes_by_group.get(group, [])
-            )
-            ), f"roundtrip_empties_cap_{group[0]}_{group[1]}_{group[2]}"
+                pulp.lpSum(
+                    self.pair_frequency[pair]
+                    for pair in self.pairs_by_empties_route.get(empties_route, [])
+                )
+                <= self.route_frequency[empties_route] * self.use_empties_route_bin[empties_route]
+            ), f"pair_cap_empties_{hash(empties_route)}"
+
+        for fixed_parts_route in self.fixed_parts_routes:
+            self.model += (
+                pulp.lpSum(
+                    self.pair_frequency[pair]
+                    for pair in self.pairs_by_parts_route.get(fixed_parts_route, [])
+                )
+                <= self.route_frequency[fixed_parts_route]
+            ), f"pair_cap_fixed_parts_{hash(fixed_parts_route)}"
+
+        for fixed_empties_route in self.fixed_empties_routes:
+            self.model += (
+                pulp.lpSum(
+                    self.pair_frequency[pair]
+                    for pair in self.pairs_by_empties_route.get(fixed_empties_route, [])
+                )
+                <= self.route_frequency[fixed_empties_route]
+            ), f"pair_cap_fixed_empties_{hash(fixed_empties_route)}"
 
     def solve_model(self):
-        """
-        Solve the MILP model using CBC.
-
-        Raises:
-            NonOptimalSolutionError: If the solver does not finish with an
-                optimal solution status.
-        """
         solver = pulp.PULP_CBC_CMD(msg=True)
         self.model.solve(solver)
         self.solve_status = pulp.LpStatus[self.model.status]
@@ -475,12 +554,6 @@ class MilkRunSolver:
             raise NonOptimalSolutionError()
 
     def convert_solutions(self):
-        """
-        Convert selected binary variables into concrete route sets.
-
-        After the MILP is solved, all active parts and empties route decisions
-        are collected into `solution_parts_routes` and `solution_empties_routes`.
-        """
         self.solution_parts_routes = {
             route for route, var in self.use_parts_route_bin.items()
             if round(pulp.value(var)) == 1
@@ -488,4 +561,9 @@ class MilkRunSolver:
         self.solution_empties_routes = {
             route for route, var in self.use_empties_route_bin.items()
             if round(pulp.value(var)) == 1
+        }
+        self.solution_pair_allocations = {
+            pair: int(round(pulp.value(var)))
+            for pair, var in self.pair_frequency.items()
+            if round(pulp.value(var)) > 0
         }

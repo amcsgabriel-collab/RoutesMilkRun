@@ -7,6 +7,7 @@ import pandas as pd
 from domain.general_algorithms import utc_now_iso
 from domain.hub import Hub
 from domain.kpi_set import KPISet
+from domain.regional_hub_view import HubLike
 from domain.routes.direct_route import DirectRoute
 from domain.routes.route import Route
 from domain.shipper import Shipper
@@ -30,8 +31,8 @@ class Scenario:
 
     name: str
 
-    hubs: set[Hub] = field(default_factory=set)
-    draft_hubs: set[Hub] = field(default_factory=set)
+    hubs: set[HubLike] = field(default_factory=set)
+    draft_hubs: set[HubLike] = field(default_factory=set)
 
     trips: set[Trip] = field(default_factory=set)
     draft_trips: set[Trip] = field(default_factory=set)
@@ -168,10 +169,9 @@ class Scenario:
         raise KeyError('Hub COFOR specified does not exist.')
 
     def find_shipper_hub(self, shipper: Shipper) -> Hub:
-        """ Finds the Hub that contains a shipper. """
         for hub in self.get_in_use_hubs():
             if shipper in hub.shippers:
-                return hub
+                return getattr(hub, "core_hub", hub)
         raise KeyError('Shipper passed is not in one of currently in use Hubs.')
 
     def find_shipper_trips(self, shipper, flow_direction):
@@ -350,58 +350,48 @@ class Scenario:
     def direct_all_kpis(self):
         return self._get_direct_kpis()
 
-    # KPIs to be displayed at the UI dashboard
-    def _get_route_kpis(self, routes):
-        return KPISet(
-            total_cost=self._route_total_cost(routes),
-            trucks=self._route_trucks(routes),
-            utilization_numerator=self._route_utilization_numerator(routes),
-            weight=self._route_weight(routes),
-            volume=self._route_volume(routes),
-            loading_meters=self._route_loading_meters(routes),
-        )
+    @staticmethod
+    def _sum_hub_kpis(hubs, attr_name: str) -> KPISet:
+        result = KPISet()
+        for hub in hubs:
+            result += getattr(hub, attr_name)
+        return result
 
     @property
     def hub_parts_first_leg_kpis(self):
-        routes = self.parts_first_leg_routes
-        return KPISet(
-            total_cost=self._route_total_cost(routes),
-        )
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_parts_first_leg_kpis")
 
     @property
     def hub_empties_first_leg_kpis(self):
-        routes = self.empties_first_leg_routes
-        return KPISet(
-            total_cost=self._route_total_cost(routes),
-        )
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_empties_first_leg_kpis")
 
     @property
     def hub_all_first_leg_kpis(self):
-        return self.hub_parts_first_leg_kpis + self.hub_empties_first_leg_kpis
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_all_first_leg_kpis")
 
     @property
     def hub_parts_linehaul_kpis(self):
-        return self._get_route_kpis(self.parts_linehaul_routes)
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_parts_linehaul_kpis")
 
     @property
     def hub_empties_linehaul_kpis(self):
-        return self._get_route_kpis(self.empties_linehaul_routes)
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_empties_linehaul_kpis")
 
     @property
     def hub_all_linehaul_kpis(self):
-        return self.hub_parts_linehaul_kpis + self.hub_empties_linehaul_kpis
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_all_linehaul_kpis")
 
     @property
     def hub_parts_kpis(self):
-        return self.hub_parts_first_leg_kpis + self.hub_parts_linehaul_kpis
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_parts_kpis")
 
     @property
     def hub_empties_kpis(self):
-        return self.hub_empties_first_leg_kpis + self.hub_empties_linehaul_kpis
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_empties_kpis")
 
     @property
     def hub_all_kpis(self):
-        return self.hub_parts_kpis + self.hub_empties_kpis
+        return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_all_kpis")
 
     @property
     def global_parts_kpis(self):
