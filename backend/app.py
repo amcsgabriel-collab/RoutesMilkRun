@@ -265,6 +265,7 @@ def api_load_project(data):
 
 
 @app.post("/api/project/save")
+@with_pm_lock
 def api_save_project():
     if not pm.project.meta.rob_file_path:
         return success({'needs_save_as': True})
@@ -362,8 +363,8 @@ def api_shippers():
 
 @app.get("/api/routes")
 def api_routes():
-    routes_summaries = [route.summary for route in pm.current_scenario.get_in_use_routes()]
-    return success(routes_summaries)
+    trip_summaries = [trip.summary for trip in pm.current_scenario.get_in_use_trips()]
+    return success(trip_summaries)
 
 @app.get("/api/hubs")
 def api_hubs():
@@ -375,6 +376,23 @@ def api_vehicles():
     vehicles_summary = [vehicle.summary for vehicle in pm.project.context.vehicles]
     return success(vehicles_summary)
 
+# ----------------------------------------------------
+# Vehicles Add / Delete
+@app.post("/api/vehicles")
+@with_pm_lock
+@json_endpoint
+def api_vehicles_add(data):
+    new_vehicle = data.get("new_vehicle")
+    pm.project.context.vehicles.append(new_vehicle)
+
+@app.delete("/api/vehicles")
+@with_pm_lock
+@json_endpoint
+def api_vehicles_delete(data):
+    ids_to_delete = data.get("ids_to_delete")
+    for id in ids_to_delete:
+        vehicle = pm.project.get_vehicle_by_id(id)
+        pm.project.context.vehicles.remove(vehicle)
 
 # ----------------------------------------------------
 # Map HTML
@@ -460,7 +478,7 @@ def _normalize_route_key(route_key):
 def get_lock_block_routes(data):
     mode = data.get("mode")
     current_routes = pm.get_lock_block_available_routes()
-    target_routes = pm.get_locked_routes() if mode == "lock" else pm.get_locked_routes()
+    target_routes = pm.get_locked_routes() if mode == "lock" else pm.get_blocked_routes()
     return success({
         "current_routes": current_routes,
         "target_routes": target_routes,
@@ -474,6 +492,7 @@ def move_lock_block_route(data):
     from_side = data.get("from_side")
     mode = data.get("mode")
     shippers_key = _normalize_route_key(data.get("route_key"))
+    flow_direction = data.get("flow_direction")
     action_map = {
             ("left", "lock"): pm.lock_route,
             ("left", "block"): pm.block_route,
@@ -481,7 +500,7 @@ def move_lock_block_route(data):
             ("right", "block"): pm.unblock_route,
         }
     action = action_map.get((from_side, mode))
-    action(shippers_key)
+    action(shippers_key, flow_direction)
     return success()
 
 

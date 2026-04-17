@@ -11,6 +11,8 @@ def get_frequency_bracket(chargeable_weight):
         raise ValueError("Chargeable weight cannot be None")
     if chargeable_weight < 0:
         raise ValueError("Chargeable weight cannot be negative")
+    if chargeable_weight == 0:
+        return 0
     if chargeable_weight <= 1000:
         return 1
     if chargeable_weight <= 2000:
@@ -22,14 +24,14 @@ def get_frequency_bracket(chargeable_weight):
 
 
 class FirstLegRoute(Route):
-    def __init__(self, hub, shipper: Shipper, vehicle: Vehicle, carrier: Carrier, flow_type: str):
+    def __init__(self, hub, shipper: Shipper, vehicle: Vehicle, carrier: Carrier, flow_direction: str):
         super().__init__(
             vehicle=vehicle,
             demand=ShipperDemand(
                 shipper=shipper,
                 plant=hub.plant,
                 carrier=carrier,
-                flow_type=flow_type
+                flow_direction=flow_direction
             ),
             costing=WeightBasedCosting()
         )
@@ -39,13 +41,13 @@ class FirstLegRoute(Route):
         self.transport_concept = "LTL"
 
     def __hash__(self):
-        return hash((self.demand.shipper, self.demand.flow_type))
+        return hash((self.demand.shipper, self.demand.flow_direction))
 
     def __eq__(self, other):
         return (
                 isinstance(other, FirstLegRoute)
                 and self.demand.shipper == other.demand.shipper
-                and self.demand.flow_type == other.demand.flow_type
+                and self.demand.flow_direction == other.demand.flow_direction
         )
 
     @property
@@ -55,7 +57,9 @@ class FirstLegRoute(Route):
         """
         return min(
             get_frequency_bracket(self.costing.chargeable_weight(self)),
-            self.hub.linehaul_route.frequency
+            self.hub.parts_linehaul_route.frequency
+            if self.demand.flow_direction == "parts"
+            else self.hub.empties_linehaul_route.frequency
         )
 
     @property

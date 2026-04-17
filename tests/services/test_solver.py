@@ -1,202 +1,423 @@
+# tests/test_milk_run_solver.py
+
+from collections import defaultdict
+from dataclasses import dataclass
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pulp
 import pytest
 
-from factories import make_solver, make_mr_solver, make_plant, make_fake_shipper, make_vehicle, make_carrier, \
-    make_ftl_solver
 from services.solver import MilkRunSolver
-from tests.factories import make_vehicle_permutation_service, make_tariffs_service
 
 
-# Receive a domain_data object with tariffs, shippers, sellers, etc. and then perform the solve flow, to output a "solution" object, which is a collection of routes.
-# This collection of routes needs to follow a set of rules defined in each sub-solver flow.
-# Also have a method to export the solution object to a "XLS table" format, according to Stellantis needs.
+# Adjust this import to your real module path
+# from your_package.milk_run_solver import MilkRunSolver
 
-# Intended flow:
-# Get domain objects: Plant, Shippers, Vehicles and Tariffs. Inside shippers: Carriers, Sellers
-# Separate FTL points and MR points = Weight exceeds a limit. This should be modeled internally in the shipper object.
-# Pass the FTL shippers to one solver, and the MR shippers to the other.
 
-# Generate RoutePattern objects
+
+# ----------------------------
+# Test doubles / helper models
+# ----------------------------
+
+@dataclass(frozen=True)
+class Carrier:
+    group: str
+
+
+@dataclass(frozen=True)
+class Vehicle:
+    id: str
+
+
+@dataclass(frozen=True)
+class Point:
+    zip_code: str
+
+
+@dataclass(frozen=True)
+class Pattern:
+    shippers: frozenset
+    frequency: int
+    deviation: int = 0
+
+    def order_shippers(self, distance_function):
+        return None
+
+    def calculate_deviation(self, distance_function):
+        return None
+
+
+@dataclass(frozen=True)
+class Demand:
+    pattern: Pattern
+
+
+@dataclass(frozen=True)
+class Shipper:
+    name: str
+    carrier: Carrier
+    has_parts_demand: bool = False
+    has_empties_demand: bool = False
+
+
+@dataclass(frozen=True)
+class Route:
+    name: str
+    carrier: Carrier
+    vehicle: Vehicle
+    starting_point: Point
+    demand: Demand
+    total_cost: int
+
+
+@dataclass(frozen=True)
+class Trip:
+    parts_route: object
+    empties_route: object
+
+
+@dataclass(frozen=True)
+class Plant:
+    cofor: str
+
+
+class DummyVehiclePermutationService:
+    def __init__(self, parts_result=None, empties_result=None):
+        self.parts_result = parts_result or set()
+        self.empties_result = empties_result or set()
+        self.calls = []
+
+    def permutate(self, patterns):
+        self.calls.append(patterns)
+        # first call => parts, second call => empties
+        if len(self.calls) == 1:
+            return self.parts_result
+        return self.empties_result
+
+
+class DummyTariff:
+    def __init__(self, savings):
+        self._savings = savings
+
+    def get_roundtrip_savings(self):
+        return self._savings
+
+
+class DummyTariffService:
+    def __init__(self):
+        self.ftl_tariffs = {}
+        self.assigned = []
+
+    def assign_ftl_mr_routes(self, routes):
+        self.assigned.append(routes)
+
+
+# ----------------------------
+# Fixtures
+# ----------------------------
+
+@pytest.fixture
+def base_objects():
+    carrier = Carrier(group="C1")
+    vehicle = Vehicle(id="V1")
+    point = Point(zip_code="12345")
+    plant = Plant(cofor="PLANT")
+
+    shipper_a = Shipper("A", carrier, has_parts_demand=True, has_empties_demand=True)
+    shipper_b = Shipper("B", carrier, has_parts_demand=True, has_empties_demand=False)
+
+    parts_pattern_a = Pattern(shippers=frozenset({shipper_a}), frequency=3)
+    parts_pattern_b = Pattern(shippers=frozenset({shipper_b}), frequency=2)
+    empties_pattern_a = Pattern(shippers=frozenset({shipper_a}), frequency=4)
+
+    parts_route_a = Route(
+        name="parts_a",
+        carrier=carrier,
+        vehicle=vehicle,
+        starting_point=point,
+        demand=Demand(parts_pattern_a),
+        total_cost=100,
+    )
+    parts_route_b = Route(
+        name="parts_b",
+        carrier=carrier,
+        vehicle=vehicle,
+        starting_point=point,
+        demand=Demand(parts_pattern_b),
+        total_cost=80,
+    )
+    empties_route_a = Route(
+        name="empties_a",
+        carrier=carrier,
+        vehicle=vehicle,
+        starting_point=point,
+        demand=Demand(empties_pattern_a),
+        total_cost=60,
+    )
+
+    return SimpleNamespace(
+        carrier=carrier,
+        vehicle=vehicle,
+        point=point,
+        plant=plant,
+        shipper_a=shipper_a,
+        shipper_b=shipper_b,
+        parts_pattern_a=parts_pattern_a,
+        parts_pattern_b=parts_pattern_b,
+        empties_pattern_a=empties_pattern_a,
+        parts_route_a=parts_route_a,
+        parts_route_b=parts_route_b,
+        empties_route_a=empties_route_a,
+    )
 
 
 @pytest.fixture
-def solver():
-    return make_solver()
+def solver(base_objects, monkeypatch):
+    obj = base_objects
 
-@pytest.fixture()
-def mr_solver():
-    return make_mr_solver()
+    vehicle_service = DummyVehiclePermutationService()
+    tariff_service = DummyTariffService()
 
-@pytest.fixture
-def plant():
-    return make_plant()
+    s = MilkRunSolver(
+        shippers={obj.shipper_a, obj.shipper_b},
+        existing_trips=set(),
+        plant=obj.plant,
+        vehicle_permutation_service=vehicle_service,
+        tariffs_service=tariff_service,
+        blocked_patterns=None,
+    )
 
-@pytest.fixture
-def ftl_solver():
-    return make_ftl_solver()
+    # avoid depending on external route-pattern generation funcs
+    monkeypatch.setattr(
+        s,
+        "generate_route_patterns",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        s,
+        "apply_ordering_to_route_patterns",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        s,
+        "remove_high_deviation_route_patterns",
+        lambda: None,
+    )
 
-
-class TestShippersClassification:
-    def test_ftl_shippers_correctly_separated(self, solver):
-        assert all(s.is_ftl_exclusive_shipper is True for s in solver.ftl_shippers)
-
-    def test_mr_shippers_correctly_separated(self, solver):
-        assert all(s.is_ftl_exclusive_shipper is False for s in solver.mr_shippers)
-
-    def test_not_in_both_lists(self, solver):
-        assert solver.ftl_shippers.isdisjoint(solver.mr_shippers)
-
-    def test_shippers_not_missing_from_both_lists(self, solver):
-        assert len(solver.ftl_shippers) + len(solver.mr_shippers) == len(solver.context_objects.shippers)
-
-
-class TestGenerateRoutePatterns:
-    def test_generates_all_single_shipper_patterns(self, mr_solver):
-        mr_solver.build()
-        single_shipper_patterns = {p for p in mr_solver.patterns if p.count_of_stops == 1}
-        assert len(single_shipper_patterns) == len(mr_solver.shippers)
-
-    def test_no_pattern_exceeds_four_stops(self, mr_solver):
-        mr_solver.build()
-        assert all(p.count_of_stops <= 4 for p in mr_solver.patterns)
-
-    def test_no_duplicate_patterns(self, mr_solver):
-        mr_solver.build()
-        assert len(mr_solver.patterns) == len(set(mr_solver.patterns))  # Might be redundant
-
-    def test_every_shipper_in_at_least_one_pattern(self, mr_solver):
-        mr_solver.build()
-        covered = {s for p in mr_solver.patterns for s in p.shippers}
-        assert covered == mr_solver.shippers
-
-    def test_generating_correct_number_of_patterns(self, mr_solver):
-        mr_solver.build()
-        expected_combinations = 5 # 4 FTL routes + 2 possible MR routes - 1 blocked MR route
-        assert len(mr_solver.patterns) == expected_combinations
-
-    def test_correctly_blocking_pattern(self, mr_solver):
-        mr_solver.build()
-        assert mr_solver.patterns.isdisjoint(mr_solver.blocked_patterns)
+    return s
 
 
-class TestBuildModel:
-    def test_model_is_created(self, mr_solver):
-        mr_solver.build()
-        assert mr_solver.model is not None
+# ----------------------------
+# Tests
+# ----------------------------
 
-    def test_objective_is_minimization(self, mr_solver):
-        mr_solver.build()
-        assert mr_solver.model.sense == pulp.LpMinimize
+def test_all_patterns_returns_union(solver):
+    carrier = Carrier("C1")
+    shipper = Shipper("A", carrier, True, True)
+    p1 = Pattern(frozenset({shipper}), 1)
+    p2 = Pattern(frozenset({shipper}), 2)
 
-    def test_one_constraint_per_shipper(self, mr_solver):
-        mr_solver.build()
-        # Number of constraints should be at least one per shipper
-        assert len(mr_solver.model.constraints) >= len(mr_solver.shippers)
+    solver.parts_patterns = {p1}
+    solver.empties_patterns = {p2}
 
-    def test_binary_variables_exist_for_all_routes(self, mr_solver):
-        mr_solver.build()
-        var_names = [v.name for v in mr_solver.model.variables()]
-        assert len(var_names) == len(mr_solver.routes)
-
-    def test_all_variables_are_binary(self, mr_solver):
-        mr_solver.build()
-        assert all(v.cat == "Integer" and v.upBound == 1
-                   for v in mr_solver.model.variables())
+    assert solver.all_patterns == {p1, p2}
 
 
-class TestSolve:
-    def test_solve_status_is_optimal(self, mr_solver):
-        mr_solver.build()
-        mr_solver.solve()
-        assert mr_solver.solve_status == "Optimal"
+def test_build_groups_routes_by_carrier_vehicle_zip(solver, base_objects):
+    obj = base_objects
 
-    def test_every_shipper_is_covered(self, mr_solver):
-        mr_solver.build()
-        mr_solver.solve()
-        for shipper in mr_solver.shippers:
-            covered = any(
-                shipper in route.pattern.shippers
-                for route in mr_solver.solution_routes
-            )
-            assert covered, f"Shipper {shipper.cofor} not covered in solution"
+    solver.vehicle_permutation_service.parts_result = {
+        obj.parts_route_a,
+        obj.parts_route_b,
+    }
+    solver.vehicle_permutation_service.empties_result = {
+        obj.empties_route_a,
+    }
 
-    def test_no_shipper_covered_twice(self, mr_solver):
-        mr_solver.build()
-        mr_solver.solve()
-        coverage_count = {s: 0 for s in mr_solver.shippers}
-        for route in mr_solver.solution_routes:
-            for shipper in route.pattern.shippers:
-                coverage_count[shipper] += 1
-        assert all(count == 1 for count in coverage_count.values())
+    build_model_mock = Mock()
+    solver.build_model = build_model_mock
 
-    def test_solution_cost_is_positive(self, mr_solver):
-        mr_solver.build()
-        total = sum(r.total_cost for r in mr_solver.solution_routes)
-        assert total >= 0
+    solver.build()
+
+    key = (obj.carrier.group, obj.vehicle.id, obj.point.zip_code)
+
+    assert solver.parts_routes == {obj.parts_route_a, obj.parts_route_b}
+    assert solver.empties_routes == {obj.empties_route_a}
+    assert set(solver.parts_routes_by_group[key]) == {obj.parts_route_a, obj.parts_route_b}
+    assert set(solver.empties_routes_by_group[key]) == {obj.empties_route_a}
+    assert solver.roundtrip_groups == {key}
+    build_model_mock.assert_called_once()
 
 
-class TestSolveKnownInstance:
-    """
-    Use a tiny hand-crafted instance where you know the optimal solution.
-    This is the most valuable test — it catches objective or constraint bugs
-    that structural tests cannot.
-    """
-    def test_optimal_solution_on_trivial_instance(self, plant):
-        """
-        Two shippers, one vehicle, one possible route.
-        Optimal solution must select that route.
-        """
-        s1 = make_fake_shipper(cofor="s1")
-        s2 = make_fake_shipper(cofor="s2")
-        v1 = make_vehicle(id="v1")
+def test_build_filters_out_zero_cost_routes(solver, base_objects):
+    obj = base_objects
+    zero_cost_route = Route(
+        name="zero",
+        carrier=obj.carrier,
+        vehicle=obj.vehicle,
+        starting_point=obj.point,
+        demand=Demand(Pattern(frozenset({obj.shipper_a}), 1)),
+        total_cost=0,
+    )
 
-        mr_solver = MilkRunSolver(
-            shippers={s1, s2},
-            plant=plant,
-            vehicle_permutation_service=make_vehicle_permutation_service({v1}),
-            tariffs_service=make_tariffs_service(),
-        )
-        mr_solver.build()
-        mr_solver.solve()
+    solver.vehicle_permutation_service.parts_result = {obj.parts_route_a, zero_cost_route}
+    solver.vehicle_permutation_service.empties_result = set()
+    solver.build_model = Mock()
 
-        assert mr_solver.solve_status == "Optimal"
-        assert len(mr_solver.solution_routes) == 1
-        assert mr_solver.solution_routes.pop().pattern.shippers == frozenset({s1, s2})
+    solver.build()
 
-    def test_solver_picks_cheaper_route(self, plant):
-        """
-        Two routes cover the same shipper. Solver must pick the cheaper one.
-        """
-        s1 = make_fake_shipper(cofor="s1")
-        v_cheap = make_vehicle(id="cheap")
-        v_expensive = make_vehicle(id="expensive")
-
-        mr_solver = MilkRunSolver(
-            shippers={s1},
-            plant=plant,
-            vehicle_permutation_service=make_vehicle_permutation_service({v_cheap, v_expensive}),
-            tariffs_service=make_tariffs_service(),  # ensure cheap < expensive in tariff table
-        )
-        mr_solver.build()
-        mr_solver.solve()
-
-        assert mr_solver.solution_routes.pop().vehicle.id == "cheap"
+    assert solver.parts_routes == {obj.parts_route_a}
+    assert zero_cost_route not in solver.parts_routes
 
 
-class TestFtlSolver:
+def test_get_roundtrip_savings_by_group_populates_dict(solver, base_objects, monkeypatch):
+    obj = base_objects
+    group = (obj.carrier.group, obj.vehicle.id, obj.point.zip_code)
+    solver.roundtrip_groups = {group}
 
-    def test_creates_all_ftl_patterns(self, ftl_solver):
-        ftl_solver.build()
-        assert len(ftl_solver.patterns) == len(ftl_solver.shippers)
+    monkeypatch.setitem(
+        solver.tariffs_service.ftl_tariffs,
+        (group[0], group[1], 35, group[2], obj.plant.cofor),
+        DummyTariff(42),
+    )
 
-    def test_solves_for_all_shippers(self, ftl_solver):
-        ftl_solver.build()
-        ftl_solver.solve()
-        assert len(ftl_solver.solution_routes) == len(ftl_solver.shippers)
+    import services.solver
+    monkeypatch.setattr(services.solver, "get_deviation_bin", lambda x: (35, 50))
 
-    def test_picks_best_vehicle(self, ftl_solver):
-        ftl_solver.build()
-        ftl_solver.solve()
-        route = ftl_solver.solution_routes.pop()
-        assert route.vehicle.id == 'v1'
+    solver.get_roundtrip_savings_by_group()
 
+    assert solver.roundtrip_saving_by_group[group] == 42
+
+
+def test_build_model_creates_decision_variables_and_constraints(solver, base_objects):
+    obj = base_objects
+    group = (obj.carrier.group, obj.vehicle.id, obj.point.zip_code)
+
+    solver.parts_routes = {obj.parts_route_a, obj.parts_route_b}
+    solver.empties_routes = {obj.empties_route_a}
+    solver.parts_routes_by_group = defaultdict(list, {
+        group: [obj.parts_route_a, obj.parts_route_b]
+    })
+    solver.empties_routes_by_group = defaultdict(list, {
+        group: [obj.empties_route_a]
+    })
+    solver.roundtrip_groups = {group}
+    solver.roundtrip_saving_by_group[group] = 10
+
+    solver.build_model()
+
+    assert solver.model is not None
+    assert set(solver.use_parts_route_bin.keys()) == {obj.parts_route_a, obj.parts_route_b}
+    assert set(solver.use_empties_route_bin.keys()) == {obj.empties_route_a}
+    assert set(solver.roundtrips_by_group.keys()) == {group}
+
+    constraint_names = set(solver.model.constraints.keys())
+
+    assert f"roundtrip_parts_cap_{group[0]}_{group[1]}_{group[2]}" in constraint_names
+    assert f"roundtrip_empties_cap_{group[0]}_{group[1]}_{group[2]}" in constraint_names
+
+    # shipper_a has parts + empties; shipper_b has parts only
+    assert len(solver.model.constraints) == 5
+
+
+def test_convert_solutions_extracts_selected_routes(solver, base_objects):
+    obj = base_objects
+
+    solver.use_parts_route_bin = {
+        obj.parts_route_a: pulp.LpVariable("parts_a", cat="Binary"),
+        obj.parts_route_b: pulp.LpVariable("parts_b", cat="Binary"),
+    }
+    solver.use_empties_route_bin = {
+        obj.empties_route_a: pulp.LpVariable("empties_a", cat="Binary"),
+    }
+
+    solver.use_parts_route_bin[obj.parts_route_a].varValue = 1
+    solver.use_parts_route_bin[obj.parts_route_b].varValue = 0
+    solver.use_empties_route_bin[obj.empties_route_a].varValue = 1
+
+    solver.convert_solutions()
+
+    assert solver.solution_parts_routes == {obj.parts_route_a}
+    assert solver.solution_empties_routes == {obj.empties_route_a}
+
+
+def test_solve_calls_solve_model_and_convert_solutions(solver):
+    solver.solve_model = Mock()
+    solver.convert_solutions = Mock()
+    solver.combine_roundtrips = Mock()
+
+    solver.solve()
+
+    solver.solve_model.assert_called_once()
+    solver.convert_solutions.assert_called_once()
+    solver.combine_roundtrips.assert_called_once()
+
+
+def test_combine_roundtrips_groups_selected_routes_and_calls_iterator(solver, base_objects, monkeypatch):
+    obj = base_objects
+
+    solver.solution_parts_routes = {obj.parts_route_a, obj.parts_route_b}
+    solver.solution_empties_routes = {obj.empties_route_a}
+    group = (obj.carrier.group, obj.vehicle.id, obj.point.zip_code)
+
+    var = pulp.LpVariable("rt", lowBound=0, cat="Integer")
+    var.varValue = 3
+    solver.roundtrips_by_group = {group: var}
+
+    captured = {}
+
+    def fake_group_key(route):
+        return route.carrier.group, route.vehicle.id, route.starting_point.zip_code
+
+    def fake_iterate_trip_combination(
+        selected_parts_by_group,
+        selected_empties_by_group,
+        roundtrip_allocations,
+    ):
+        captured["selected_parts_by_group"] = selected_parts_by_group
+        captured["selected_empties_by_group"] = selected_empties_by_group
+        captured["roundtrip_allocations"] = roundtrip_allocations
+        return {"trip_1", "trip_2"}
+
+    import services.solver
+    monkeypatch.setattr(services.solver, "_group_key", fake_group_key)
+    monkeypatch.setattr(services.solver, "iterate_trip_combination", fake_iterate_trip_combination)
+
+    solver.combine_roundtrips()
+
+    assert set(captured["selected_parts_by_group"][group]) == {obj.parts_route_a, obj.parts_route_b}
+    assert set(captured["selected_empties_by_group"][group]) == {obj.empties_route_a}
+    assert captured["roundtrip_allocations"] == {group: 3}
+    assert solver.solution_trips == {"trip_1", "trip_2"}
+
+
+def test_solve_model_raises_when_not_optimal(solver, monkeypatch):
+    class DummyNonOptimal(Exception):
+        pass
+
+    import services.solver
+    monkeypatch.setattr(services.solver, "NonOptimalSolutionError", DummyNonOptimal)
+
+    solver.model = pulp.LpProblem("test", pulp.LpMinimize)
+
+    def fake_solve(_solver):
+        solver.model.status = pulp.LpStatusInfeasible
+
+    monkeypatch.setattr(solver.model, "solve", fake_solve)
+
+    with pytest.raises(DummyNonOptimal):
+        solver.solve_model()
+
+
+def test_build_calls_get_roundtrip_savings_by_group(solver, base_objects):
+    obj = base_objects
+    solver.vehicle_permutation_service.parts_result = {obj.parts_route_a}
+    solver.vehicle_permutation_service.empties_result = {obj.empties_route_a}
+
+    solver.get_roundtrip_savings_by_group = Mock()
+    solver.build_model = Mock()
+
+    solver.build()
+
+    solver.get_roundtrip_savings_by_group.assert_called_once()

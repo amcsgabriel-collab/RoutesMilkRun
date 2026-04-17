@@ -19,6 +19,7 @@ class RoutePatternRepository:
         patterns_by_vehicle: dict[str, set[RoutePattern]] = {}
         for route_name, group in self._df.groupby("Route name"):
             vehicle_id = group["Means of Transport"].iloc[0]
+            flow_direction = group['Parts or Empties'].iloc[0]
             shippers = {
                 shippers_by_cofor[row["Shipper COFOR"]]
                 for _, row in group.iterrows()
@@ -30,11 +31,12 @@ class RoutePatternRepository:
                 shippers=shippers,
                 plant=plant,
                 route_name=route_name,
-                tour=group['Tour name'].iloc[0]
+                tour=group['Tour name'].iloc[0],
+                flow_direction="parts" if flow_direction == "P" else "empties",
             )
 
             shipper_route_freq = (
-                self._df
+                self._df[self._df["Parts or Empties"] == flow_direction]
                 .groupby(['Shipper COFOR', 'Route name'])['Frequency / week']
                 .sum()
             )

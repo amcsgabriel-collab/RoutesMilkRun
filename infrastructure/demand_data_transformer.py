@@ -90,8 +90,15 @@ class DemandDataTransformer:
 
     def add_plant_coordinates(self):
         locations = self.locations.copy()
-        locations = locations[['Key', 'Latitude', 'Longitude']]
-        locations.columns = ['Plant COFOR', 'Plant Latitude', 'Plant Longitude']
+        locations.rename(columns={
+            'Key': 'Plant COFOR',
+            'Latitude': 'Plant Latitude',
+            'Longitude': 'Plant Longitude',
+            'ZIP Code': 'Plant Zip Code',
+            'Country': 'Plant Country'},
+            inplace=True
+        )
+        locations['Plant Country'] = locations['Plant Country'].str.split(" ").str[0]
         self.database = self.database.merge(
             locations,
             how="left",
@@ -126,7 +133,7 @@ class DemandDataTransformer:
         )
 
     def aggregate_database_by_shipper(self):
-        key = ['Shipper COFOR']
+        key = ['Shipper COFOR', 'Parts or Empties']
         self.aggregated_database = (
             self.database
             .groupby(key, as_index=False)

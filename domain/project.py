@@ -112,4 +112,6 @@ class Project:
 
     def refresh_tariffs_scenario_hubs(self):
         for hub in self.current_scenario.get_in_use_hubs():
-            self.context.tariffs_service.assign_ltl_routes(hub.first_leg_routes)
+            self.context.tariffs_service.assign_ltl_routes(hub.parts_first_leg_routes)
+            if hub.has_empties_flow:
+                self.context.tariffs_service.assign_ltl_routes(hub.empties_first_leg_routes)

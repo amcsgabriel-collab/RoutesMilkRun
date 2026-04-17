@@ -12,3 +12,9 @@ class Demand:
     sellers: list[Seller]
     type: Literal["P", "E"]
     original_network: Literal["hub", "direct"]
+
+    @property
+    def is_not_zero(self):
+        return (self.weight != 0
+                and self.volume != 0
+                and self.loading_meters != 0)

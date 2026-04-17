@@ -12,314 +12,460 @@ The optimization is split into two subproblems:
 - FTL-exclusive shippers: solved deterministically by creating single-shipper
   patterns and selecting the cheapest vehicle/tariff option for each one.
 
-Locked routes from the scenario are preserved and included directly in the
-final solution. Shippers already covered by locked routes are excluded from
-optimization. User-blocked route patterns are also excluded from candidate
-generation.
+Locked routes from the scenario are preserved as preselected direct routes and
+participate in final trip assembly, including roundtrip pairing where possible.
+Shippers already covered by locked routes are excluded from optimization.
+User-blocked route patterns are also excluded from candidate generation.
 """
+from collections import defaultdict
 
 import pulp
 
-from domain.domain_algorithms import make_haversine_cache
+from domain.domain_algorithms import make_haversine_cache, get_deviation_bin
 from domain.data_structures import Plant
 from domain.exceptions import NonOptimalSolutionError
 from domain.project import Project
 from domain.routes.direct_route import DirectRoute
 from domain.shipper import Shipper
 from domain.routes.route_pattern import RoutePattern
+from domain.trip import Trip
+from services.roundtrip_combination_algorithm import iterate_trip_combination
 from services.route_pattern_creation_iterator import iterate_creation_of_route_patterns
 from services.tariff_service import TariffService
 from services.vehicle_permutation_service import VehiclePermutationService
 
 
+def _group_key(route: DirectRoute) -> tuple:
+    return route.carrier.group, route.vehicle.id, route.starting_point.zip_code
+
 class Solver:
-    """
-    Coordinate route solving for the currently selected project scenario.
-
-    This class is the main entry point for optimization. It prepares the
-    scenario-specific inputs, separates shippers by solving strategy, runs the
-    dedicated solvers, and merges their results with already locked routes.
-
-    Responsibilities:
-    - Read the active region and scenario from the project metadata
-    - Exclude shippers already covered by locked routes
-    - Split remaining shippers into milk run and FTL-exclusive groups
-    - Run the corresponding specialized solvers
-    - Merge optimized routes with locked routes into the final solution
-
-    Attributes:
-        project: Project object that contains all project context data.
-        filtered_shippers: Direct shippers not already covered by locked routes.
-        ftl_shippers: Subset of filtered shippers that must be served by FTL.
-        mr_shippers: Subset of filtered shippers eligible for milk run solving.
-        solution_routes: Final set of routes, initialized with locked routes.
-        blocked_patterns: Route patterns explicitly forbidden by the user.
-    """
-
     def __init__(
             self,
             project: Project,
     ):
         self.project = project
-        locked_shippers = {
+        locked_parts_shippers = {
             shipper
             for route in project.current_scenario.locked_routes
-            for shipper in route.pattern.shippers
+            for shipper in route.demand.pattern.shippers
+            if route.demand.flow_direction == "parts"
         }
-        self.filtered_shippers = {
+        locked_empties_shippers = {
             shipper
-            for shipper in project.current_scenario.direct_shippers.values()
-            if shipper not in locked_shippers
-               and shipper.has_demand
+            for route in project.current_scenario.locked_routes
+            for shipper in route.demand.pattern.shippers
+            if route.demand.flow_direction == "empties"
         }
-        self.ftl_shippers = {s for s in self.filtered_shippers if s.is_ftl_exclusive_parts}
-        self.mr_shippers = {s for s in self.filtered_shippers if not s.is_ftl_exclusive_parts}
-        self.solution_routes = set(project.current_scenario.locked_routes.copy())
-        self.blocked_patterns = {r.pattern for r in project.current_scenario.blocked_routes}
+        self.filtered_parts_shippers = {
+            shipper
+            for shipper in project.current_scenario.parts_direct_shippers.values()
+            if shipper not in locked_parts_shippers
+               and shipper.has_parts_demand
+        }
+        self.filtered_empties_shippers = {
+            shipper
+            for shipper in project.current_scenario.empties_direct_shippers.values()
+            if shipper not in locked_empties_shippers
+               and shipper.has_empties_demand
+        }
+
+        self.locked_parts_routes = {
+            route
+            for route in project.current_scenario.locked_routes
+            if route.demand.flow_direction == "parts"
+        }
+
+        self.locked_empties_routes = {
+            route
+            for route in project.current_scenario.locked_routes
+            if route.demand.flow_direction == "empties"
+        }
+
+        self.solution_trips = set()
+
+        self.blocked_patterns = {
+            r.demand.pattern
+            for r in project.current_scenario.blocked_routes
+        }
+
         self.vehicle_permutation_service = VehiclePermutationService(project.context.vehicles)
 
         self.mr_solver: MilkRunSolver = None
-        self.ftl_solver: FtlSolver = None
-
-    @property
-    def tariffs_service(self):
-        return self.project.context.tariffs_service
-
-    @property
-    def plant(self):
-        return self.project.context.plant
 
     def run(self):
-        """
-        Execute the full optimization flow for the current scenario.
-
-        Returns:
-            Set of operational routes including locked routes, optimized milk run
-            routes, and optimized FTL routes.
-        """
         self.solve_milkrun_shippers()
-        self.solve_ftl_shippers()
         self.combine_solutions()
-        return self.solution_routes
+        return self.solution_trips
 
     def solve_milkrun_shippers(self):
-        """
-        Solve all non-FTL-exclusive shippers using the milk run optimization model.
-
-        Existing routes from the AS-IS scenario are passed in so their route
-        patterns can be reused when the same shipper combination already exists.
-        This preserves route metadata such as route names where applicable.
-        """
         self.mr_solver = MilkRunSolver(
-            shippers=self.mr_shippers,
-            existing_routes=self.project.current_region.scenarios["AS-IS"].routes,
-            plant=self.plant,
+            parts_shippers=self.filtered_parts_shippers,
+            empties_shippers=self.filtered_empties_shippers,
+            existing_trips=self.project.current_region.scenarios["AS-IS"].trips,
+            plant=self.project.plant,
             vehicle_permutation_service=self.vehicle_permutation_service,
-            tariffs_service=self.tariffs_service,
-            blocked_patterns=self.blocked_patterns
+            tariffs_service=self.project.context.tariffs_service,
+            blocked_patterns=self.blocked_patterns,
+            fixed_parts_routes=self.locked_parts_routes,
+            fixed_empties_routes=self.locked_empties_routes,
         )
         self.mr_solver.build()
         self.mr_solver.solve()
 
-    def solve_ftl_shippers(self):
-        """
-        Solve FTL-exclusive shippers using single-shipper route patterns.
-
-        Each shipper is modeled as its own route pattern and later assigned the
-        cheapest feasible operational route after vehicle permutation and tariff
-        assignment.
-        """
-        self.ftl_solver = FtlSolver(
-            shippers=self.ftl_shippers,
-            plant=self.plant,
-            vehicle_permutation_service=self.vehicle_permutation_service,
-            tariffs_service=self.tariffs_service,
-            existing_routes=self.project.current_region.scenarios["AS-IS"].routes
-        )
-        self.ftl_solver.build()
-        self.ftl_solver.solve()
-
     def combine_solutions(self):
-        """
-        Merge locked, milk run, and FTL route solutions into one final route set.
-        """
-        self.solution_routes = self.solution_routes.union(
-            self.mr_solver.solution_routes.union(
-                self.ftl_solver.solution_routes))
+        selected_parts_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
+        selected_empties_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
+
+        mr_parts_routes = self.mr_solver.solution_parts_routes if self.mr_solver else set()
+        mr_empties_routes = self.mr_solver.solution_empties_routes if self.mr_solver else set()
+
+        all_parts_routes = self.locked_parts_routes | mr_parts_routes
+        all_empties_routes = self.locked_empties_routes | mr_empties_routes
+
+        for route in all_parts_routes:
+            selected_parts_by_group[_group_key(route)].append(route)
+
+        for route in all_empties_routes:
+            selected_empties_by_group[_group_key(route)].append(route)
+
+        self.solution_trips = iterate_trip_combination(
+            selected_parts_by_group=selected_parts_by_group,
+            selected_empties_by_group=selected_empties_by_group,
+        )
 
 
 class MilkRunSolver:
-    """
-    Solve a milk run routing problem for a set of eligible shippers.
-
-    This solver generates feasible multi-stop route patterns, expands them into
-    operational routes through vehicle permutations and tariff assignment, and
-    then solves a binary optimization model to select the minimum-cost set of
-    routes.
-
-    The model enforces exact shipper coverage: every shipper in the input set
-    must be covered by exactly one selected route.
-
-    Solver lifecycle:
-    1. Generate route patterns grouped by carrier
-    2. Order shipper visits and compute route deviation
-    3. Remove patterns with excessive deviation
-    4. Generate operational routes via vehicle permutations
-    5. Assign tariffs and calculate total route cost
-    6. Build and solve the MILP model minimizing costs
-    7. Convert selected decision variables into solution routes
-
-    Notes:
-        - Existing route patterns may be reused to preserve stable metadata
-          such as route names.
-        - Blocked patterns are excluded before route generation continues.
-        - Only shippers within the same carrier group may be grouped together.
-    """
-    patterns: set[RoutePattern]
-    routes: set[DirectRoute]
-
     def __init__(
             self,
-            shippers: set[Shipper],
-            existing_routes: set[DirectRoute],
-            existing_empties_routes: set[DirectRoute],
+            parts_shippers: set[Shipper],
+            empties_shippers: set[Shipper],
+            existing_trips: set[Trip],
             plant: Plant,
             vehicle_permutation_service: VehiclePermutationService,
             tariffs_service: TariffService,
             blocked_patterns: set[RoutePattern] | None = None,
+            fixed_parts_routes: set[DirectRoute] | None = None,
+            fixed_empties_routes: set[DirectRoute] | None = None,
     ):
-        """
-        Initialize a milk run solver for a shipper subset.
-
-        Args:
-            shippers: Shippers to be covered by the solver.
-            existing_routes: Previously known routes whose patterns may be reused.
-            plant: Plant serving as the route origin/end point.
-            vehicle_permutation_service: Service used to expand route patterns into
-                feasible vehicle-specific operational routes.
-            tariffs_service: Service used to assign tariffs and cost to routes.
-            blocked_patterns: Route patterns that must not be generated or reused.
-        """
-        self.shippers = shippers
-        self.existing_routes = existing_routes
-        self.existing_patterns = {r.pattern for r in self.existing_routes}
+        self.parts_shippers = parts_shippers
+        self.empties_shippers = empties_shippers
+        self.existing_trips = existing_trips
+        self.existing_parts_patterns = {
+            t.parts_route.demand.pattern
+            for t in self.existing_trips
+            if t.parts_route is not None
+        }
+        self.existing_empties_patterns = {
+            t.empties_route.demand.pattern
+            for t in self.existing_trips
+            if t.empties_route is not None
+        }
         self.plant = plant
         self.vehicle_permutation_service = vehicle_permutation_service
         self.tariffs_service = tariffs_service
         self.blocked_patterns = blocked_patterns
-        self.patterns = set()
-        self.routes = set()
+        self.fixed_parts_routes = fixed_parts_routes or set()
+        self.fixed_empties_routes = fixed_empties_routes or set()
+
+        self.ftl_parts_shippers = {s for s in self.parts_shippers if s.is_ftl_exclusive_parts}
+        self.ftl_empties_shippers = {s for s in self.empties_shippers if s.is_ftl_exclusive_empties}
+        self.mr_parts_shippers = {s for s in self.parts_shippers if not s.is_ftl_exclusive_parts}
+        self.mr_empties_shippers = {s for s in self.empties_shippers if not s.is_ftl_exclusive_empties}
+
+        self.parts_patterns: set[RoutePattern] = set()
+        self.empties_patterns: set[RoutePattern] = set()
+        self.parts_routes: set[DirectRoute] = set()
+        self.empties_routes: set[DirectRoute] = set()
+
+        self.roundtrip_groups: list[tuple] = []
+        self.parts_routes_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
+        self.empties_routes_by_group: dict[tuple, list[DirectRoute]] = defaultdict(list)
+        self.roundtrip_saving_by_group: dict[tuple, int] = defaultdict(int)
 
         self.model = None
-        self.use_route_bin = None
+        self.use_parts_route_bin = None
+        self.use_empties_route_bin = None
+        self.roundtrips_by_group = None
+        self.fixed_parts_frequency_by_group = None
+        self.fixed_empties_frequency_by_group = None
+
         self.solve_status = "Not Solved Yet"
-        self.solution_routes = set()
+        self.solution_parts_routes = set()
+        self.solution_empties_routes = set()
+        self.solution_trips = set()
+
+    @property
+    def all_patterns(self):
+        """
+        Return the union of all generated route patterns across both flows.
+        """
+        return self.parts_patterns.union(self.empties_patterns)
 
     def build(self):
         """
-        Prepare the optimization problem.
+        Prepare the optimization model and all candidate inputs.
 
-        This method generates candidate route patterns, filters infeasible or
-        undesirable ones, converts them into priced operational routes, and builds
-        the MILP model used in `solve()`.
+        This method generates route patterns, applies ordering and deviation
+        filtering, expands patterns into operational routes, assigns tariffs,
+        computes roundtrip savings by group, and builds the MILP model used in
+        `solve()`.
         """
         self.generate_route_patterns()
         self.apply_ordering_to_route_patterns()
         self.remove_high_deviation_route_patterns()
-        new_routes = self.vehicle_permutation_service.permutate(self.patterns)
-        self.tariffs_service.assign_ftl_mr_routes(new_routes)
-        self.routes = {r for r in new_routes if r.total_cost > 0}
+
+        new_parts_routes = self.vehicle_permutation_service.permutate(self.parts_patterns)
+        self.tariffs_service.assign_ftl_mr_routes(new_parts_routes)
+        self.parts_routes = {r for r in new_parts_routes if r.total_cost > 0}
+
+        new_empties_routes = self.vehicle_permutation_service.permutate(self.empties_patterns)
+        self.tariffs_service.assign_ftl_mr_routes(new_empties_routes)
+        self.empties_routes = {r for r in new_empties_routes if r.total_cost > 0}
+
+        for r in self.parts_routes:
+            key = (r.carrier.group, r.vehicle.id, r.starting_point.zip_code)
+            self.parts_routes_by_group[key].append(r)
+
+        for r in self.empties_routes:
+            key = (r.carrier.group, r.vehicle.id, r.starting_point.zip_code)
+            self.empties_routes_by_group[key].append(r)
+
+        fixed_groups = {
+            _group_key(r) for r in (self.fixed_parts_routes | self.fixed_empties_routes)
+        }
+        self.roundtrip_groups = (
+                set(self.parts_routes_by_group.keys())
+                | set(self.empties_routes_by_group.keys())
+                | fixed_groups
+        )
+
+        self.get_roundtrip_savings_by_group()
+        self.fixed_parts_frequency_by_group = defaultdict(int)
+        for r in self.fixed_parts_routes:
+            self.fixed_parts_frequency_by_group[_group_key(r)] += r.frequency
+
+        self.fixed_empties_frequency_by_group = defaultdict(int)
+        for r in self.fixed_empties_routes:
+            self.fixed_empties_frequency_by_group[_group_key(r)] += r.frequency
+
+
         self.build_model()
 
     def solve(self):
         """
-        Solve the prepared MILP model and convert the selected variables into
-        operational routes.
+        Solve the prepared optimization model and convert the result into trips.
+
+        The solver first selects parts and empties routes through the MILP,
+        converts the active binary variables into route sets, and then combines
+        those routes into operational trips with roundtrip pairing where possible.
         """
         self.solve_model()
         self.convert_solutions()
 
-    def generate_route_patterns(self):
-        """
-        Generate candidate route patterns for milk run optimization.
-
-        Route patterns are created separately per carrier group, since shippers
-        from different carrier groups cannot be combined into the same pattern.
-
-        Existing patterns are reused when a generated shipper combination already
-        exists in `existing_routes`, preserving stable route metadata such as
-        route names.
-        """
-        carriers = {s.carrier.group for s in self.shippers}
+    def generate_route_patterns(self) -> None:
+        carriers = {s.carrier.group for s in self.parts_shippers | self.empties_shippers}
         for carrier in carriers:
-            carrier_shippers = {s for s in self.shippers if s.carrier.group == carrier}
-            self.patterns |= iterate_creation_of_route_patterns(
-                shippers=carrier_shippers,
-                existing_patterns=self.existing_patterns,
+            carrier_mr_parts_shippers = {
+                s for s in self.mr_parts_shippers if s.carrier.group == carrier
+            }
+            carrier_mr_empties_shippers = {
+                s for s in self.mr_empties_shippers if s.carrier.group == carrier
+            }
+            carrier_ftl_parts_shippers = {
+                s for s in self.ftl_parts_shippers if s.carrier.group == carrier
+            }
+            carrier_ftl_empties_shippers = {
+                s for s in self.ftl_empties_shippers if s.carrier.group == carrier
+            }
+
+            self.parts_patterns |= iterate_creation_of_route_patterns(
+                shippers=carrier_mr_parts_shippers,
+                existing_patterns=self.existing_parts_patterns,
+                flow_direction="parts",
                 plant=self.plant,
-                blocked_combinations=self.blocked_patterns
+                max_stops=4,
+                blocked_combinations=self.blocked_patterns,
+            )
+            self.empties_patterns |= iterate_creation_of_route_patterns(
+                shippers=carrier_mr_empties_shippers,
+                existing_patterns=self.existing_empties_patterns,
+                flow_direction="empties",
+                plant=self.plant,
+                max_stops=4,
+                blocked_combinations=self.blocked_patterns,
+            )
+
+            self.parts_patterns |= iterate_creation_of_route_patterns(
+                shippers=carrier_ftl_parts_shippers,
+                existing_patterns=self.existing_parts_patterns,
+                flow_direction="parts",
+                plant=self.plant,
+                max_stops=1,
+                blocked_combinations=self.blocked_patterns,
+            )
+            self.empties_patterns |= iterate_creation_of_route_patterns(
+                shippers=carrier_ftl_empties_shippers,
+                existing_patterns=self.existing_empties_patterns,
+                flow_direction="empties",
+                plant=self.plant,
+                max_stops=1,
+                blocked_combinations=self.blocked_patterns,
             )
 
     def apply_ordering_to_route_patterns(self):
         """
-        Order shipper visits within each pattern and compute route deviation.
+        Order shipper visits and compute deviation for all patterns.
 
-        Ordering and deviation are computed using a cached haversine distance
-        function to avoid repeated distance calculations across patterns.
+        A cached haversine distance function is used so the same distance
+        calculation can be reused across multiple patterns efficiently.
         """
         distance_function = make_haversine_cache()
-        for pattern in self.patterns:
+        for pattern in self.all_patterns:
             pattern.order_shippers(distance_function)
             pattern.calculate_deviation(distance_function)
 
     def remove_high_deviation_route_patterns(self):
         """
-        Remove route patterns whose deviation exceeds the accepted threshold.
+        Remove patterns whose deviation exceeds the accepted threshold.
 
-        This acts as a pruning step before vehicle permutation and optimization,
-        reducing model size and excluding operationally undesirable patterns.
+        This reduces the number of candidate routes before vehicle permutation
+        and optimization, pruning patterns considered operationally undesirable.
+        The current threshold is 150.
         """
-        patterns_to_remove = {p for p in self.patterns if p.deviation > 150}
-        for pattern in patterns_to_remove:
-            self.patterns.remove(pattern)
+        parts_patterns_to_remove = {p for p in self.parts_patterns if p.deviation > 150}
+        for pattern in parts_patterns_to_remove:
+            self.parts_patterns.remove(pattern)
+
+        empties_patterns_to_remove = {p for p in self.empties_patterns if p.deviation > 150}
+        for pattern in empties_patterns_to_remove:
+            self.empties_patterns.remove(pattern)
+
+    def get_roundtrip_savings_by_group(self):
+        """
+        Load roundtrip savings for each eligible operational group.
+
+        Savings are looked up from FTL tariffs using a grouping key composed of
+        carrier group, vehicle, deviation bin, route origin zip code, and plant.
+        If no tariff is found for a group, no savings are applied for that group.
+        """
+        tariffs_dict = self.tariffs_service.ftl_tariffs
+        for group in self.roundtrip_groups:
+            tariff = tariffs_dict.get(
+                (group[0], group[1], get_deviation_bin(35)[0], group[2], self.plant.cofor)
+            )
+            if tariff:
+                self.roundtrip_saving_by_group[group] = tariff.get_roundtrip_savings()
 
     def build_model(self):
         """
-        Build the binary linear optimization model for route selection.
+        Build the mixed-integer optimization model.
 
         Decision variables:
-            use_route_bin[route] = 1 if the route is selected, else 0.
+            use_parts_route_bin[route]:
+                1 if a parts route is selected, 0 otherwise.
+            use_empties_route_bin[route]:
+                1 if an empties route is selected, 0 otherwise.
+            roundtrips_by_group[group]:
+                Integer number of roundtrips allocated to an operational group.
 
         Objective:
-            Minimize total route cost across all selected routes.
+            Minimize total selected route cost minus roundtrip savings.
 
         Constraints:
-            Each input shipper must be covered by exactly one selected route.
+            - Every parts shipper must be covered by exactly one selected parts route.
+            - Every empties shipper must be covered by exactly one selected empties route.
+            - Roundtrips allocated to a group cannot exceed selected parts frequency
+              for that group.
+            - Roundtrips allocated to a group cannot exceed selected empties
+              frequency for that group.
         """
         self.model = pulp.LpProblem("Atomic_Route_Allocation", pulp.LpMinimize)
-        self.use_route_bin = pulp.LpVariable.dicts(
-            name="use_route",
-            indices=self.routes,
+
+        self.use_parts_route_bin = pulp.LpVariable.dicts(
+            name="use_parts_route",
+            indices=self.parts_routes,
             cat="Binary"
         )
 
-        # Model Objective: Minimize following function
-        # The first non-constraining expression is the objective.
-        self.model += pulp.lpSum(r.total_cost * self.use_route_bin[r] for r in self.routes)
+        self.use_empties_route_bin = pulp.LpVariable.dicts(
+            name="use_empties_route",
+            indices=self.empties_routes,
+            cat="Binary"
+        )
 
-        # Coverage constraint
-        for shipper in self.shippers:
-            self.model += pulp.lpSum(
-                self.use_route_bin[route] for route in self.routes if shipper in route.pattern.shippers
-            ) == 1
+        self.roundtrips_by_group = pulp.LpVariable.dicts(
+            name="roundtrips_by_group",
+            indices=list(self.roundtrip_groups),
+            lowBound=0,
+            cat="Integer"
+        )
+
+        max_rt_cost = max(
+            [r.roundtrip_total_cost for r in self.parts_routes | self.empties_routes],
+            default=0,
+        )
+
+        epsilon = 1.0 / (1000 * (1 + max_rt_cost))
+
+        self.model += (
+                pulp.lpSum(
+                    (r.total_cost + epsilon * r.roundtrip_total_cost) * self.use_parts_route_bin[r]
+                    for r in self.parts_routes
+                )
+                + pulp.lpSum(
+            (r.total_cost + epsilon * r.roundtrip_total_cost) * self.use_empties_route_bin[r]
+            for r in self.empties_routes
+        )
+                - pulp.lpSum(
+            self.roundtrip_saving_by_group[g] * self.roundtrips_by_group[g]
+            for g in self.roundtrip_groups
+        )
+        )
+
+        for shipper in self.parts_shippers:
+            self.model += (
+                    pulp.lpSum(
+                        self.use_parts_route_bin[route]
+                        for route in self.parts_routes
+                        if shipper in route.demand.pattern.shippers
+                    ) == 1
+            )
+
+        for shipper in self.empties_shippers:
+            self.model += (
+                    pulp.lpSum(
+                        self.use_empties_route_bin[route]
+                        for route in self.empties_routes
+                        if shipper in route.demand.pattern.shippers
+                    ) == 1
+            )
+
+        for group in self.roundtrip_groups:
+            self.model += (
+                    self.roundtrips_by_group[group]
+                    <= self.fixed_parts_frequency_by_group.get(group, 0)
+                    + pulp.lpSum(
+                r.frequency * self.use_parts_route_bin[r]
+                for r in self.parts_routes_by_group.get(group, [])
+            )
+            ), f"roundtrip_parts_cap_{group[0]}_{group[1]}_{group[2]}"
+
+            self.model += (
+                    self.roundtrips_by_group[group]
+                    <= self.fixed_empties_frequency_by_group.get(group, 0)
+                    + pulp.lpSum(
+                r.frequency * self.use_empties_route_bin[r]
+                for r in self.empties_routes_by_group.get(group, [])
+            )
+            ), f"roundtrip_empties_cap_{group[0]}_{group[1]}_{group[2]}"
 
     def solve_model(self):
         """
         Solve the MILP model using CBC.
 
         Raises:
-            NonOptimalSolutionError: If the solver does not return an optimal
-                solution status.
+            NonOptimalSolutionError: If the solver does not finish with an
+                optimal solution status.
         """
         solver = pulp.PULP_CBC_CMD(msg=True)
         self.model.solve(solver)
@@ -330,80 +476,16 @@ class MilkRunSolver:
 
     def convert_solutions(self):
         """
-        Convert binary decision variable values into the final selected route set.
+        Convert selected binary variables into concrete route sets.
+
+        After the MILP is solved, all active parts and empties route decisions
+        are collected into `solution_parts_routes` and `solution_empties_routes`.
         """
-        self.solution_routes = {
-            route for route, var in self.use_route_bin.items()
+        self.solution_parts_routes = {
+            route for route, var in self.use_parts_route_bin.items()
             if round(pulp.value(var)) == 1
         }
-
-
-class FtlSolver:
-    """
-    Solve routing for FTL-exclusive shippers.
-
-    Unlike the milk run solver, this solver does not build an optimization
-    model. Each shipper is assigned to a single-stop route pattern, expanded
-    into candidate operational routes, priced, and then reduced to the
-    cheapest route per pattern.
-
-    This solver is intended for shippers that must not be grouped into a
-    multi-stop milk run.
-    """
-    def __init__(
-            self,
-            shippers: set[Shipper],
-            plant: Plant,
-            vehicle_permutation_service: VehiclePermutationService,
-            tariffs_service: TariffService,
-            existing_routes: set[DirectRoute]
-    ):
-        self.shippers = shippers
-        self.plant = plant
-        self.vehicle_permutation_service = vehicle_permutation_service
-        self.tariffs_service = tariffs_service
-        self.distance_function = make_haversine_cache()
-        self.existing_ftl_routes = {r for r in existing_routes if r.pattern.transport_concept == "FTL"}
-
-        self.patterns = set()
-        self.routes = set()
-        self.solution_routes = set()
-
-    def build(self):
-        """
-        Generate and price candidate FTL routes for the input shippers.
-        """
-        self.build_patterns()
-        new_routes = self.vehicle_permutation_service.permutate(self.patterns)
-        self.tariffs_service.assign_ftl_mr_routes(new_routes)
-        self.routes = {r for r in new_routes if r.total_cost > 0}
-
-    def solve(self):
-        """
-        Select the cheapest priced route for each single-shipper pattern.
-        """
-        best_routes = {}
-        for route in self.routes:
-            pattern = route.pattern
-            if pattern not in best_routes or route.total_cost < best_routes[pattern].total_cost:
-                best_routes[pattern] = route
-        self.solution_routes = set(best_routes.values())
-
-    def build_patterns(self):
-        """
-        Create one single-shipper route pattern per shipper and compute its order
-        and deviation metadata.
-        """
-
-        existing_patterns_by_shipper = {next(iter(r.pattern.shippers)): r.pattern.copy() for r in self.existing_ftl_routes}
-        for shipper in self.shippers:
-            if shipper in existing_patterns_by_shipper:
-                pattern = existing_patterns_by_shipper[shipper]
-                pattern.reset_allocation()
-            else:
-                pattern = RoutePattern({shipper}, self.plant)
-                pattern.is_new_pattern = True
-                pattern.order_shippers(self.distance_function)
-                pattern.calculate_deviation(self.distance_function)
-
-            self.patterns.add(pattern)
+        self.solution_empties_routes = {
+            route for route, var in self.use_empties_route_bin.items()
+            if round(pulp.value(var)) == 1
+        }

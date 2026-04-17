@@ -25,12 +25,13 @@ class ScenarioService:
 
     @staticmethod
     def delete_scenario(project, scenario_name: str):
-        scenarios = project.scenarios_list
+        scenarios = project.current_region.scenarios
         if scenario_name not in scenarios:
             raise KeyError(f"Scenario '{scenario_name}' does not exist.")
         if scenarios[scenario_name].is_baseline:
             raise CannotEditBaselineError()
         scenarios.pop(scenario_name)
+        project.set_current_scenario("AS-IS")
 
     @staticmethod
     def _next_name(existing: set[str], base: str) -> str:

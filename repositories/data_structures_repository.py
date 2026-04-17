@@ -57,6 +57,7 @@ class SellerRepository:
                 zip=row["SELLER ZIP CODE"],
                 city=row["SELLER CITY"],
                 country=row["SELLER COUNTRY"],
+                docks=row["Docks (,)"]
             )
             sellers.setdefault(row["Shipper COFOR"], set()).add(seller)
         return sellers

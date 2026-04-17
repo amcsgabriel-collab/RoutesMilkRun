@@ -36,6 +36,7 @@ class Seller:
     zip: str
     city: str
     country: str
+    docks: str
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class Vehicle:
     volume_capacity:float
     loading_meters_capacity:float
 
+    @property
     def summary(self) -> dict:
         return {
             "id": self.id,

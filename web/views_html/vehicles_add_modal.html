@@ -1,0 +1,32 @@
+<div class="modal-header">
+  <h3>Add Vehicle</h3>
+</div>
+
+<div class="modal-body">
+  <div style="display:grid; gap:10px;">
+    <label>
+      <div style="margin-bottom:4px;">ID</div>
+      <input id="vehicle-id" type="text" style="width:100%;" />
+    </label>
+
+    <label>
+      <div style="margin-bottom:4px;">Weight Capacity</div>
+      <input id="vehicle-weight" type="number" step="0.01" style="width:100%;" />
+    </label>
+
+    <label>
+      <div style="margin-bottom:4px;">Volume Capacity</div>
+      <input id="vehicle-volume" type="number" step="0.01" style="width:100%;" />
+    </label>
+
+    <label>
+      <div style="margin-bottom:4px;">Loading Meters Capacity</div>
+      <input id="vehicle-loading-meters" type="number" step="0.01" style="width:100%;" />
+    </label>
+  </div>
+</div>
+
+<div class="modal-footer" style="margin-top:10px;text-align:right; display:flex; justify-content:flex-end; gap:8px;">
+  <button id="vehicle-add-cancel">Cancel</button>
+  <button id="vehicle-add-save">Add</button>
+</div>

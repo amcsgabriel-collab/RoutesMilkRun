@@ -3,9 +3,20 @@
 </div>
 
 <div class="modal-body">
-  <div class="modal-controls" style="margin-bottom:10px;">
+  <div class="modal-controls" style="margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
     <input id="shippers-filter" placeholder="Filter by name..." style="width:60%;padding:6px;border-radius:6px;border:1px solid #ddd" />
-    <button id="shippers-refresh" style="margin-left:8px;padding:6px 10px;">Refresh</button>
+    <button id="shippers-refresh" style="padding:6px 10px;">Refresh</button>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+        <input type="radio" name="shippers-flow" value="parts" checked />
+        <span>Parts</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+        <input type="radio" name="shippers-flow" value="empties" />
+        <span>Empties</span>
+      </label>
+    </div>
   </div>
 
   <div id="shippers-error" style="color:#b91c1c;display:none;margin-bottom:8px;"></div>
@@ -24,7 +35,7 @@
         </tr>
       </thead>
       <tbody id="shippers-tbody">
-        <tr><td colspan="5" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
+        <tr><td colspan="7" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
       </tbody>
     </table>
   </div>

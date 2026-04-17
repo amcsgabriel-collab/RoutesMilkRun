@@ -1,6 +1,9 @@
 import { apiGet } from "../api.js";
 import { loadHtml } from "../utils.js";
 
+let currentKpiData = null;
+let selectedFlows = new Set(["parts", "empties"]);
+
 function getNestedValue(obj, path) {
     return path.split('.').reduce((acc, key) => acc?.[key], obj);
 }
@@ -133,12 +136,39 @@ function applyDeltaClass(element, deltaValue, betterWhen) {
     element.classList.add(isImprovement ? 'delta-positive' : 'delta-negative');
 }
 
+function getSelectedFlowKey() {
+    const hasParts = selectedFlows.has("parts");
+    const hasEmpties = selectedFlows.has("empties");
+
+    if (hasParts && hasEmpties) return "all";
+    if (hasParts) return "parts";
+    return "empties";
+}
+
+function resolveKpiPath(templatePath) {
+    const flow = getSelectedFlowKey();
+    return templatePath.replaceAll("{flow}", flow);
+}
+
+function updateFlowToggleUi() {
+    document.querySelectorAll("[data-kpi-flow-toggle]").forEach((btn) => {
+        const flow = btn.dataset.kpiFlowToggle;
+        btn.classList.toggle("active", selectedFlows.has(flow));
+    });
+
+    const label = document.getElementById("kpi-flow-label");
+    if (label) {
+        label.textContent = getSelectedFlowKey().toUpperCase();
+    }
+}
+
 function renderScenarioKpis(kpiData) {
-    console.log("renderScenarioKpis called", kpiData);
+    currentKpiData = kpiData;
     const elements = document.querySelectorAll('[data-kpi]');
 
     elements.forEach((element) => {
-        const path = element.dataset.kpi;
+        const rawPath = element.dataset.kpi;
+        const path = resolveKpiPath(rawPath);
         const formatType = element.dataset.format || 'text';
         const value = getNestedValue(kpiData, path);
 
@@ -148,35 +178,50 @@ function renderScenarioKpis(kpiData) {
             const betterWhenPath = path.replace('_vs_as_is', '_better_when');
             const betterWhen = getNestedValue(kpiData, betterWhenPath);
             applyDeltaClass(element, value, betterWhen);
+        } else {
+            element.classList.remove('delta-positive', 'delta-negative', 'delta-neutral');
         }
     });
+
+    updateFlowToggleUi();
+}
+
+function toggleFlow(flow) {
+    if (selectedFlows.has(flow)) {
+        if (selectedFlows.size === 1) {
+            return;
+        }
+        selectedFlows.delete(flow);
+    } else {
+        selectedFlows.add(flow);
+    }
+
+    if (currentKpiData) {
+        renderScenarioKpis(currentKpiData);
+    } else {
+        updateFlowToggleUi();
+    }
+}
+
+function wireKpiFlowToggle() {
+    document.querySelectorAll("[data-kpi-flow-toggle]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            toggleFlow(btn.dataset.kpiFlowToggle);
+        });
+    });
+
+    updateFlowToggleUi();
 }
 
 export async function loadScenarioKpis() {
-    console.log("loadScenarioKpis called");
     const html = await loadHtml("/views_html/kpi_summary.html");
     document.getElementById("kpi-placeholder").innerHTML = html;
+    wireKpiFlowToggle();
+
     try {
         const kpiData = await apiGet("/api/scenario/kpis");
         renderScenarioKpis(kpiData);
-    } catch(e) {
-        alert(e)
+    } catch (e) {
+        alert(e);
     }
 }
-
-/*
-Example usage:
-
-document.getElementById("scenario-list").addEventListener("click", async (event) => {
-    const scenarioItem = event.target.closest("[data-scenario-id]");
-    if (!scenarioItem) return;
-
-    const scenarioId = scenarioItem.dataset.scenarioId;
-
-    try {
-        await loadScenarioKpis(scenarioId);
-    } catch (error) {
-        console.error(error);
-    }
-});
-*/

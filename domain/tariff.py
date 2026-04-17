@@ -4,13 +4,23 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class FtlTariff:
     base_cost: float
+    roundtrip_base_cost: float
     stop_cost: float
 
     def price_for_stops(self, count_of_stops: int, deviation_km: int) -> float:
         if deviation_km > 150:
-            return self.base_cost + self.stop_cost * deviation_km * count_of_stops
+            return self.base_cost + self.stop_cost * deviation_km * (count_of_stops - 1)
         else:
-            return self.base_cost + self.stop_cost * count_of_stops
+            return self.base_cost + self.stop_cost * (count_of_stops - 1)
+
+    def roundtrip_price_for_stops(self, count_of_stops: int, deviation_km: int) -> float:
+        if deviation_km > 150:
+            return self.roundtrip_base_cost / 2 + self.stop_cost * deviation_km * (count_of_stops - 1)
+        else:
+            return self.roundtrip_base_cost / 2 + self.stop_cost * (count_of_stops - 1)
+
+    def get_roundtrip_saving(self):
+        return (self.base_cost * 2) - self.roundtrip_base_cost
 
 
 @dataclass(frozen=True)

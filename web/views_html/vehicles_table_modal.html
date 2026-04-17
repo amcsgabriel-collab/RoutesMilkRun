@@ -3,10 +3,18 @@
 </div>
 
 <div class="modal-body">
+  <div style="margin-bottom:10px; display:flex; justify-content:flex-end; gap:8px;">
+    <button id="vehicles-add">Add vehicle</button>
+    <button id="vehicles-delete">Delete</button>
+  </div>
+
   <div style="overflow:auto; max-height:420px; border-radius:6px; background:#fff;">
     <table id="vehicles-table" class="vehicles-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
+          <th style="text-align:center;padding:8px;border-bottom:1px solid #eee; width:36px;">
+            <input type="checkbox" id="vehicles-select-all" />
+          </th>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">ID</th>
           <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Weight Capacity</th>
           <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Volume Capacity</th>

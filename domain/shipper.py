@@ -20,7 +20,6 @@ class Shipper:
             parts_demand: Demand,
             empties_demand: Demand,
             carrier: Carrier,
-            docks: list[str],
             original_network: str = None,
             coordinates: tuple[float, float] | None = None,
     ):
@@ -31,7 +30,6 @@ class Shipper:
         self.city = city
         self.street = street
         self.country = country
-        self.docks = docks
         self.sourcing_region = sourcing_region
         self.parts_demand = parts_demand
         self.empties_demand = empties_demand
@@ -56,12 +54,12 @@ class Shipper:
         return decimal_to_dms_str(self.coordinates)
 
     @property
-    def has_demand(self):
-        return self.parts_demand is not None
+    def has_parts_demand(self):
+        return self.parts_demand is not None and self.parts_demand.is_not_zero
 
     @property
     def has_empties_demand(self):
-        return self.empties_demand is not None
+        return self.empties_demand is not None and self.empties_demand.is_not_zero
 
     @property
     def is_ftl_exclusive_parts(self):
@@ -82,14 +80,6 @@ class Shipper:
                 or (demand.volume > MIN_TRUCK_CAPACITIES["Volume Capacity"] * MAX_FREQUENCY)
                 or (demand.loading_meters > MIN_TRUCK_CAPACITIES["Load Meter Capacity"] * MAX_FREQUENCY))
 
-    @property
-    def parts_summary(self):
-        return self.summary(self.parts_demand)
-
-    @property
-    def empties_summary(self):
-        return self.summary(self.empties_demand)
-
     def qualifies_for_hub(self, thresholds):
         if thresholds["weight"] is not None:
             if self.parts_demand.weight >= thresholds["weight"]:
@@ -102,14 +92,22 @@ class Shipper:
                 return False
         return True
 
-    def summary(self, demand: Demand):
+    @property
+    def summary(self):
         return {
             "name": self.name,
             "cofor": self.cofor,
             "zip_key": self.zip_key(2),
-            "weight": demand.weight,
-            "volume": demand.volume,
-            "loading_meters": demand.loading_meters,
-            "coordinates": self.coordinates,
-            "original_network": demand.original_network,
+            "coordinates": self.formatted_coordinates,
+            "original_network": self.original_network,
+            "parts_demand": {
+                "weight": self.parts_demand.weight,
+                "volume": self.parts_demand.volume,
+                "loading_meters": self.parts_demand.loading_meters,
+            },
+            "empties_demand": {
+                "weight": self.empties_demand.weight,
+                "volume": self.empties_demand.volume,
+                "loading_meters": self.empties_demand.loading_meters,
+            },
         }

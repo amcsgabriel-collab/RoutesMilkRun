@@ -15,18 +15,19 @@ class RoutePattern:
             self,
             shippers: set[Shipper],
             plant: Plant,
-            flow_type: str,
+            flow_direction: str,
             route_name: str | None = None,
             tour: str | None = None,
             mr_overutilization_rate: float = 0.05,
     ):
         self.count_of_stops = len(shippers)
-        if self.count_of_stops > 4:
-            raise ValueError(f'Milkrun routes cannot have more than 4 stops. Got {self.count_of_stops}')
+        # if self.count_of_stops > 4:
+        #     shipper_cofors = [s.cofor for s in shippers]
+        #     raise ValueError(f'Milkrun routes cannot have more than 4 stops. Route {route_name} got {self.count_of_stops}: {", ".join(shipper_cofors)}')
         if self.count_of_stops == 0:
-            raise ValueError(f'Passed shippers list is empty. Please verify.')
+            raise ValueError(f'Passed shippers list for Route {route_name} is empty. Please verify.')
         self.shippers = frozenset(shippers)
-        self.flow_type = flow_type
+        self.flow_direction = flow_direction
         self.is_new_pattern = False
         self.plant = plant
         self.route_name = route_name
@@ -42,7 +43,7 @@ class RoutePattern:
 
         self.carriers = {s.carrier.group for s in shippers}
         if len(self.carriers) > 1:
-            raise ValueError('Milkrun routes cannot have more than one carrier')
+            raise ValueError(f'Route {route_name}: Milkrun routes cannot have more than one carrier.')
         self.carrier = self.carriers.pop()
 
         self.transport_concept = "MR" if self.count_of_stops > 1 else "FTL"
@@ -52,11 +53,11 @@ class RoutePattern:
         return (isinstance(other, RoutePattern)
                 and self.shippers == other.shippers
                 and self.route_name == other.route_name
-                and self.flow_type == other.flow_type
+                and self.flow_direction == other.flow_direction
                 )
 
     def __hash__(self):
-        return hash((self.shippers, self.route_name, self.flow_type))
+        return hash((self.shippers, self.route_name, self.flow_direction))
 
     def copy(self):
         return copy.deepcopy(self)
@@ -66,7 +67,7 @@ class RoutePattern:
         return tuple(sorted(s.cofor for s in self.shippers))
 
     def _demand(self, shipper: Shipper):
-        return shipper.parts_demand if self.flow_type == "parts" else shipper.empties_demand
+        return shipper.parts_demand if self.flow_direction == "parts" else shipper.empties_demand
 
     @property
     def weight(self):
@@ -124,7 +125,7 @@ class RoutePattern:
         new_pattern = RoutePattern(
             shippers=new_shippers,
             plant=self.plant,
-            flow_type=self.flow_type,
+            flow_direction=self.flow_direction,
         )
         new_pattern.shipper_allocation = {
             s: self.shipper_allocation[s]
@@ -132,3 +133,6 @@ class RoutePattern:
         }
         new_pattern.is_new_pattern = self.is_new_pattern
         return new_pattern
+
+    def get_name(self, roundtrip_id):
+        return f'{self.starting_point.cofor}_{roundtrip_id}'

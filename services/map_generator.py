@@ -1,13 +1,13 @@
 import folium
 import pandas as pd
+from PyQt5.QtCore import left
 
 from domain.data_structures import Plant
 from domain.hub import Hub
-from domain.routes.direct_route import DirectRoute
 from domain.project import Scenario
 from domain.shipper import Shipper
+from domain.trip import Trip
 
-# Variables & Constants
 PLANT_COLOR = "#CE2900"
 HUB_ORIGINAL_COLOR = "#A3990B"
 HUB_NEW_COLOR = "#FFFB00"
@@ -27,13 +27,13 @@ def create_map():
 
 
 def add_plant_marker(map_object, plant: Plant):
-    # Plotting the Plant location
     tooltip = folium.Tooltip(
         f"""
             <b>Plant:</b> {plant.name}<br>
             <b>COFOR:</b> {plant.cofor}<br>
             {plant.formatted_coordinates}
-            """, sticky=True
+        """,
+        sticky=True
     )
 
     folium.CircleMarker(
@@ -47,27 +47,83 @@ def add_plant_marker(map_object, plant: Plant):
     ).add_to(map_object)
 
 
-def plot_direct_points(shippers: list[Shipper], feature_group):
+def _get_shipper_demand(shipper: Shipper, flow: str):
+    return shipper.parts_demand if flow == "parts" else shipper.empties_demand
+
+
+def _has_flow_demand(shipper: Shipper, flow: str) -> bool:
+    demand = shipper.parts_demand if flow == "parts" else shipper.empties_demand
+    return (
+        demand is not None
+        and (
+            float(demand.weight or 0.0) > 0.0
+            or float(demand.volume or 0.0) > 0.0
+            or float(demand.loading_meters or 0.0) > 0.0
+        )
+    )
+
+def _get_hub_shippers_from_hubs(hubs: list[Hub], flow: str) -> list[Shipper]:
+    shippers_by_cofor: dict[str, Shipper] = {}
+
+    for hub in hubs:
+        if flow == "empties" and not hub.has_empties_flow:
+            continue
+
+        for shipper in hub.shippers:
+            if not shipper.coordinates or not all(pd.notna(c) for c in shipper.coordinates):
+                continue
+            if not _has_flow_demand(shipper, flow):
+                continue
+
+            shippers_by_cofor[shipper.cofor] = shipper
+
+    return list(shippers_by_cofor.values())
+
+
+def _get_direct_shippers_from_routes(routes, flow: str) -> list[Shipper]:
+    shippers_by_cofor: dict[str, Shipper] = {}
+    for route in routes:
+        for shipper in route.demand.pattern.shippers:
+            if not shipper.coordinates or not all(pd.notna(c) for c in shipper.coordinates):
+                continue
+            shippers_by_cofor[shipper.cofor] = shipper
+
+    return list(shippers_by_cofor.values())
+
+
+def plot_direct_points(shippers: list[Shipper], feature_group, flow: str):
     for shipper in shippers:
+        demand = _get_shipper_demand(shipper, flow)
+        if not demand:
+            continue
+
+        if (
+            demand.weight == 0.0
+            and demand.volume == 0.0
+            and demand.loading_meters == 0.0
+        ):
+            continue
+
         tooltip = folium.Tooltip(
             f"""
                 <b>Name:</b> {shipper.name}<br>
                 <b>COFOR:</b> {shipper.cofor}<br>
                 <b>Carrier:</b> {shipper.carrier.group}<br>
-                <b>Weight Demand:</b> {shipper.weight:,.2f}<br>
-                <b>Volume Demand:</b> {shipper.volume:,.2f}<br>
-                <b>Load Meter Demand:</b> {shipper.loading_meters:,.2f}<br>
+                <b>Flow:</b> {flow[0].upper()}<br>
+                <b>Weight Demand:</b> {demand.weight:,.2f}<br>
+                <b>Volume Demand:</b> {demand.volume:,.2f}<br>
+                <b>Load Meter Demand:</b> {demand.loading_meters:,.2f}<br>
                 {shipper.formatted_coordinates}
-                """,
+            """,
             sticky=True
         )
 
-        color = DIRECT_MR_ORIGINAL_COLOR if shipper.original_network == 'direct' else DIRECT_MR_NEW_COLOR
+        color = DIRECT_MR_ORIGINAL_COLOR if shipper.original_network == "direct" else DIRECT_MR_NEW_COLOR
         folium.CircleMarker(
             location=shipper.coordinates,
             radius=4,
             weight=0.5,
-            color='black',
+            color="black",
             fill=True,
             fill_color=color,
             fill_opacity=0.7,
@@ -75,27 +131,39 @@ def plot_direct_points(shippers: list[Shipper], feature_group):
         ).add_to(feature_group)
 
 
-def plot_hub_points(shippers: list[Shipper], feature_group):
+def plot_hub_points(shippers: list[Shipper], feature_group, flow: str):
     for shipper in shippers:
+        demand = _get_shipper_demand(shipper, flow)
+        if not demand:
+            continue
+
+        if (
+            demand.weight == 0.0
+            and demand.volume == 0.0
+            and demand.loading_meters == 0.0
+        ):
+            continue
+
         tooltip = folium.Tooltip(
             f"""
                 <b>Name:</b> {shipper.name}<br>
                 <b>COFOR:</b> {shipper.cofor}<br>
                 <b>Carrier:</b> {shipper.carrier.group}<br>
-                <b>Weight Demand:</b> {shipper.weight:,.2f}<br>
-                <b>Volume Demand:</b> {shipper.volume:,.2f}<br>
-                <b>Load Meter Demand:</b> {shipper.loading_meters:,.2f}<br>
+                <b>Flow:</b> {flow[0].upper()}<br>
+                <b>Weight Demand:</b> {demand.weight:,.2f}<br>
+                <b>Volume Demand:</b> {demand.volume:,.2f}<br>
+                <b>Load Meter Demand:</b> {demand.loading_meters:,.2f}<br>
                 {shipper.formatted_coordinates}
-                """,
+            """,
             sticky=True
         )
 
-        color = HUB_NEW_COLOR if shipper.original_network == 'direct' else HUB_ORIGINAL_COLOR
+        color = HUB_NEW_COLOR if shipper.original_network == "direct" else HUB_ORIGINAL_COLOR
         folium.CircleMarker(
             location=shipper.coordinates,
             radius=4,
             weight=0.5,
-            color='black',
+            color="black",
             fill=True,
             fill_color=color,
             fill_opacity=0.7,
@@ -103,31 +171,31 @@ def plot_hub_points(shippers: list[Shipper], feature_group):
         ).add_to(feature_group)
 
 
-def plot_routes(routes: list[DirectRoute], feature_group):
+def plot_routes(routes, feature_group):
     for route in routes:
         coordinates = [
             shipper.coordinates
-            for shipper in route.pattern.sequence
+            for shipper in route.demand.pattern.sequence
         ]
 
-        if route.pattern.is_new_pattern:
-            color = DIRECT_FTL_NEW_COLOR if route.pattern.transport_concept == "FTL" else DIRECT_MR_NEW_COLOR
+        if route.demand.pattern.is_new_pattern:
+            color = DIRECT_FTL_NEW_COLOR if route.demand.pattern.transport_concept == "FTL" else DIRECT_MR_NEW_COLOR
         else:
-            color = DIRECT_FTL_ORIGINAL_COLOR if route.pattern.transport_concept == "FTL" else DIRECT_MR_ORIGINAL_COLOR
+            color = DIRECT_FTL_ORIGINAL_COLOR if route.demand.pattern.transport_concept == "FTL" else DIRECT_MR_ORIGINAL_COLOR
 
-        plant_coordinates = route.pattern.plant.coordinates
+        plant_coordinates = route.demand.pattern.plant.coordinates
         coordinates.append(plant_coordinates)
 
-        points = ", ".join(shipper.cofor for shipper in route.pattern.sequence)
+        points = ", ".join(shipper.cofor for shipper in route.demand.pattern.sequence)
         tooltip = folium.Tooltip(
             f"""
-                <b>Route:</b> {route.pattern.route_name}<br>
+                <b>Route:</b> {route.demand.pattern.route_name}<br>
                 <b>Vehicle:</b> {route.vehicle.id}<br>
                 <b>Frequency:</b> {route.frequency} T<br>
                 <b>Utilization:</b> {route.max_utilization:.2f}%<br>
-                <b>Carrier:</b> {route.pattern.carrier}<br>
+                <b>Flow:</b> {route.demand.flow_direction[0].upper()}<br>
                 <b>Points Attended:</b> {points}<br>
-                """,
+            """,
             sticky=True
         )
 
@@ -140,45 +208,53 @@ def plot_routes(routes: list[DirectRoute], feature_group):
         ).add_to(feature_group)
 
 
-def plot_hubs(hubs: list[Hub], feature_group):
+def plot_hubs(hubs: list[Hub], feature_group, flow: str):
     for hub in hubs:
-        # Adding HUB Second leg
+        if flow == "empties" and not hub.has_empties_flow:
+            continue
+
+        linehaul_route = hub.parts_linehaul_route if flow == "parts" else getattr(hub, "empties_linehaul_route", None)
+        first_leg_routes = hub.parts_first_leg_routes if flow == "parts" else hub.empties_first_leg_routes
+
+        if linehaul_route is None:
+            continue
+
         tooltip = folium.Tooltip(
             f"""
                 <b>Linehaul Leg:</b><br>
                 <b>Hub COFOR:</b> {hub.cofor}<br>
                 <b>Hub Name:</b> {hub.name}<br>
-                <b>Frequency:</b> {hub.linehaul_route.frequency} T<br>
-                <b>Utilization:</b> {hub.linehaul_route.max_utilization:.2f}%<br>
-                <b>Weight:</b> {hub.linehaul_route.weight:.2f}<br>
-                <b>Volume:</b> {hub.linehaul_route.volume:.2f}<br>
-                <b>Loading Meters:</b> {hub.linehaul_route.loading_meters:.2f}<br>
-                """,
+                <b>Flow:</b> {flow}<br>
+                <b>Frequency:</b> {linehaul_route.frequency} T<br>
+                <b>Utilization:</b> {linehaul_route.max_utilization:.2f}%<br>
+                <b>Weight:</b> {linehaul_route.weight:.2f}<br>
+                <b>Volume:</b> {linehaul_route.volume:.2f}<br>
+                <b>Loading Meters:</b> {linehaul_route.loading_meters:.2f}<br>
+            """,
             sticky=True
         )
-        color = HUB_SECOND_LEG_COLOR
         folium.PolyLine(
             locations=[hub.coordinates, hub.plant.coordinates],
             tooltip=tooltip,
             weight=2,
-            color=color
+            color=HUB_SECOND_LEG_COLOR
         ).add_to(feature_group)
 
-        # Adding HUB First leg
-        for route in hub.first_leg_routes:
+        for route in first_leg_routes:
             tooltip = folium.Tooltip(
                 f"""
                     <b>First Leg:</b><br>
                     <b>Shipper COFOR:</b> {route.shipper.cofor}<br>
                     <b>Shipper Name:</b> {route.shipper.name}<br>
+                    <b>Flow:</b> {flow[0].upper()}<br>
                     <b>Frequency:</b> {route.frequency} T<br>
                     <b>Weight:</b> {route.weight:.2f}<br>
                     <b>Volume:</b> {route.volume:.2f}<br>
                     <b>Chargeable Weight:</b> {route.costing.chargeable_weight(route):.2f}<br>
-                    """,
+                """,
                 sticky=True
             )
-            color = HUB_ORIGINAL_COLOR if route.shipper.original_network == 'hub' else HUB_NEW_COLOR
+            color = HUB_ORIGINAL_COLOR if route.shipper.original_network == "hub" else HUB_NEW_COLOR
             folium.PolyLine(
                 locations=[route.shipper.coordinates, hub.coordinates],
                 tooltip=tooltip,
@@ -187,34 +263,32 @@ def plot_hubs(hubs: list[Hub], feature_group):
                 color=color
             ).add_to(feature_group)
 
-        # Adding HUB Points
         tooltip = folium.Tooltip(
             f"""
                 <b>Hub COFOR:</b> {hub.cofor}<br>
                 <b>Hub Name:</b> {hub.name}<br>
                 {hub.formatted_coordinates}
-                """,
+            """,
             sticky=True
         )
 
-        color = HUB_POINT_COLOR
         folium.CircleMarker(
             location=hub.coordinates,
             radius=6,
             weight=2,
-            color='black',
+            color="black",
             fill=True,
-            fill_color=color,
+            fill_color=HUB_POINT_COLOR,
             fill_opacity=0.7,
             tooltip=tooltip
         ).add_to(feature_group)
 
 
-def fit_map_to_routes(map_object, plant: Plant, routes: list[DirectRoute], padding=(30, 30)):
+def fit_map_to_routes(map_object, plant: Plant, routes, padding=(30, 30)):
     points = [plant.coordinates]
 
     for route in routes:
-        for shipper in route.pattern.shippers:
+        for shipper in route.demand.pattern.shippers:
             if shipper.coordinates:
                 points.append(shipper.coordinates)
 
@@ -225,73 +299,61 @@ def fit_map_to_routes(map_object, plant: Plant, routes: list[DirectRoute], paddi
         map_object.zoom_start = 10
 
 
+def _get_trip_routes_by_flow(trips: list[Trip], flow: str):
+    if flow == "parts":
+        return [trip.parts_route for trip in trips if trip.parts_route is not None and trip.parts_route.has_demand]
+    return [trip.empties_route for trip in trips if trip.empties_route is not None and trip.empties_route.has_demand]
+
+
 def generate_scenario_map_html(scenario: Scenario) -> str:
     m = create_map()
 
-    direct_fg = folium.FeatureGroup(name="Direct")
-    hub_fg = folium.FeatureGroup(name="Hubs")
-    direct_fg.add_to(m)
-    hub_fg.add_to(m)
+    direct_parts_fg = folium.FeatureGroup(name="Direct Parts", show=True)
+    direct_empties_fg = folium.FeatureGroup(name="Direct Empties", show=False)
+    hub_parts_fg = folium.FeatureGroup(name="Hub Parts", show=True)
+    hub_empties_fg = folium.FeatureGroup(name="Hub Empties", show=False)
 
-    direct_points = list(scenario.direct_shippers.values())
-    direct_points = [p for p in direct_points if p.coordinates and all(pd.notna(c) for c in p.coordinates)]
-    routes = list(scenario.get_in_use_routes())
-    hub_points = list(scenario.hub_shippers.values())
-    hub_points = [p for p in hub_points if p.coordinates and all(pd.notna(c) for c in p.coordinates)]
+    direct_parts_fg.add_to(m)
+    direct_empties_fg.add_to(m)
+    hub_parts_fg.add_to(m)
+    hub_empties_fg.add_to(m)
+
+    trips = list(scenario.get_in_use_trips())
+
+    parts_routes = _get_trip_routes_by_flow(trips, "parts")
+    empties_routes = _get_trip_routes_by_flow(trips, "empties")
+
+    direct_parts_points = _get_direct_shippers_from_routes(parts_routes, "parts")
+    direct_empties_points = _get_direct_shippers_from_routes(empties_routes, "empties")
+
+    plot_direct_points(direct_parts_points, direct_parts_fg, "parts")
+    plot_routes(parts_routes, direct_parts_fg)
+
+    plot_direct_points(direct_empties_points, direct_empties_fg, "empties")
+    plot_routes(empties_routes, direct_empties_fg)
+
     hubs = list(scenario.get_in_use_hubs())
-    plant = routes[0].pattern.plant
+    hub_parts_points = _get_hub_shippers_from_hubs(hubs, "parts")
+    hub_empties_points = _get_hub_shippers_from_hubs(hubs, "empties")
 
-    plot_direct_points(direct_points, direct_fg)
-    plot_routes(routes, direct_fg)
-    plot_hub_points(hub_points, hub_fg)
-    plot_hubs(hubs, hub_fg)
+    plot_hub_points(hub_parts_points, hub_parts_fg, "parts")
+    plot_hubs(hubs, hub_parts_fg, "parts")
+
+    plot_hub_points(hub_empties_points, hub_empties_fg, "empties")
+    plot_hubs(hubs, hub_empties_fg, "empties")
+
+    plant = scenario.plant if hasattr(scenario, "plant") else (
+        parts_routes[0].demand.pattern.plant if parts_routes else empties_routes[0].demand.pattern.plant
+    )
     add_plant_marker(m, plant)
 
-
     folium.LayerControl(collapsed=True).add_to(m)
+
     toggle_js = """
     <style>
     .leaflet-control-layers {
         display: none !important;
     }
-    </style>
-
-    <script>
-    function toggleLayer(target, btn) {
-        document.querySelectorAll(
-            '.leaflet-control-layers-overlays input[type=checkbox]'
-        ).forEach(cb => {
-            const label = cb.nextSibling?.textContent?.trim();
-            if (label === target) {
-                cb.click();
-
-                setTimeout(() => {
-                    btn.classList.toggle('active', cb.checked);
-                }, 0);
-            }
-        });
-    }
-
-    function syncButtons() {
-    document.querySelectorAll('.map-btn').forEach(btn => {
-        const target = btn.dataset.layer;
-
-        document.querySelectorAll(
-            '.leaflet-control-layers-overlays input[type=checkbox]'
-        ).forEach(cb => {
-            const label = cb.nextSibling?.textContent?.trim();
-            if (label === target) {
-                btn.classList.toggle('active', cb.checked);
-            }
-        });
-    });
-    }
-
-    document.addEventListener("DOMContentLoaded", syncButtons);
-
-    </script>
-
-    <style>
     .map-btn {
         padding: 6px 10px;
         font-size: 13px;
@@ -299,13 +361,83 @@ def generate_scenario_map_html(scenario: Scenario) -> str:
         border: 1px solid #d0d7de;
         background: #f6f8fa;
         cursor: pointer;
-        }
+    }
     .map-btn.active {
         background: #b0cfff;
     }
-
-
+    .map-btn.radio-active {
+        background: #7fb3ff;
+        font-weight: 600;
+    }
     </style>
+
+    <script>
+    const NETWORK_LAYERS = {
+        "Direct": ["Direct Parts", "Direct Empties"],
+        "Hubs": ["Hub Parts", "Hub Empties"]
+    };
+
+    const FLOW_LAYERS = {
+        "parts": ["Direct Parts", "Hub Parts"],
+        "empties": ["Direct Empties", "Hub Empties"]
+    };
+
+    let activeNetworks = new Set(["Direct", "Hubs"]);
+    let activeFlow = "parts";
+
+    function getOverlayCheckbox(labelText) {
+        const checkboxes = document.querySelectorAll('.leaflet-control-layers-overlays input[type=checkbox]');
+        for (const cb of checkboxes) {
+            const label = cb.nextSibling?.textContent?.trim();
+            if (label === labelText) return cb;
+        }
+        return null;
+    }
+
+    function setLayerVisible(labelText, visible) {
+        const cb = getOverlayCheckbox(labelText);
+        if (!cb) return;
+        if (cb.checked !== visible) cb.click();
+    }
+
+    function syncVisibleLayers() {
+        const allLayers = ["Direct Parts", "Direct Empties", "Hub Parts", "Hub Empties"];
+
+        allLayers.forEach(layer => {
+            const isDirect = layer.startsWith("Direct");
+            const networkEnabled = isDirect ? activeNetworks.has("Direct") : activeNetworks.has("Hubs");
+            const isParts = layer.endsWith("Parts");
+            const flowEnabled = activeFlow === (isParts ? "parts" : "empties");
+            setLayerVisible(layer, networkEnabled && flowEnabled);
+        });
+
+        document.querySelectorAll('.network-btn').forEach(btn => {
+            btn.classList.toggle('active', activeNetworks.has(btn.dataset.network));
+        });
+
+        document.querySelectorAll('.flow-btn').forEach(btn => {
+            btn.classList.toggle('radio-active', btn.dataset.flow === activeFlow);
+        });
+    }
+
+    function toggleNetwork(network) {
+        if (activeNetworks.has(network)) {
+            activeNetworks.delete(network);
+        } else {
+            activeNetworks.add(network);
+        }
+        syncVisibleLayers();
+    }
+
+    function selectFlow(flow) {
+        activeFlow = flow;
+        syncVisibleLayers();
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        syncVisibleLayers();
+    });
+    </script>
 
     <div style="
         position: fixed;
@@ -313,14 +445,24 @@ def generate_scenario_map_html(scenario: Scenario) -> str:
         right: 15px;
         z-index: 9999;
         background: white;
-        padding: 6px;
+        padding: 8px;
         border-radius: 4px;
         box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
     ">
-        <button class="map-btn" data-layer="Direct" onclick="toggleLayer('Direct', this)">Direct</button>
-        <button class="map-btn" data-layer="Hubs" onclick="toggleLayer('Hubs', this)">Hubs</button>
+        <div style="display:flex; gap:6px;">
+            <button class="map-btn network-btn active" data-network="Direct" onclick="toggleNetwork('Direct')">Direct</button>
+            <button class="map-btn network-btn active" data-network="Hubs" onclick="toggleNetwork('Hubs')">Hubs</button>
+        </div>
+        <div style="display:flex; gap:6px;">
+            <button class="map-btn flow-btn radio-active" data-flow="parts" onclick="selectFlow('parts')">Parts</button>
+            <button class="map-btn flow-btn" data-flow="empties" onclick="selectFlow('empties')">Empties</button>
+        </div>
     </div>
     """
     m.get_root().html.add_child(folium.Element(toggle_js))
-    fit_map_to_routes(m, plant, routes)
+
+    fit_map_to_routes(m, plant, parts_routes or empties_routes)
     return m.get_root().render()

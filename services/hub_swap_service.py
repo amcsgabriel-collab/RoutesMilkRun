@@ -9,6 +9,7 @@ from domain.routes.first_leg_route import FirstLegRoute
 from domain.routes.route_pattern import RoutePattern
 from domain.scenario import Scenario
 from domain.shipper import Shipper
+from domain.trip import Trip
 from infrastructure.data_loader import DataLoader
 from paths import get_helper_path
 from settings import DEFAULT_VEHICLE_ID
@@ -65,55 +66,117 @@ class HubSwapService:
 
         return shippers_without_hub
 
-    def move_direct_shipper_to_hub(self, project: Project, shipper: Shipper, hub:Hub) -> None:
+    def move_direct_shipper_to_hub(self, project: Project, shipper: Shipper, hub: Hub) -> None:
         """
         Moves shipper from direct network to assigned Hub.
         :param project: Current Project.
         :param shipper: Shipper to be moved.
         :param hub: Hub to which the shipper was assigned.
         """
-        self._remove_shipper_from_direct_network(project, shipper)
+        move_parts = shipper.has_parts_demand
+        move_empties = hub.has_empties_flow and shipper.has_empties_demand
+
+        if not move_parts and not move_empties:
+            return
+
+        self._remove_shipper_from_direct_network(
+            project,
+            shipper,
+            remove_parts=move_parts,
+            remove_empties=move_empties,
+        )
         self._add_shipper_to_hub(project, shipper, hub)
 
     @staticmethod
-    def _remove_shipper_from_direct_network(project: Project, shipper: Shipper) -> None:
-        """
-        Removes shipper from whichever route it belongs to, and adjust the pricing of the route.
-        If route is FTL (Only contains that shipper), remove it entirely.
-        This must happen in the scenario draft. If not available, create one from existing routes.
-        :param project: Current Project.
-        :param shipper: Shipper to be moved.
-        """
+    def _remove_shipper_from_direct_network(
+            project: Project,
+            shipper: Shipper,
+            remove_parts: bool,
+            remove_empties: bool,
+    ) -> None:
         scenario = project.current_scenario
-        current_shipper_routes = scenario.find_shipper_routes(shipper)
-        if not current_shipper_routes:
-            return
-        if not scenario.draft_routes:
-            scenario.create_draft_routes()
+        current_shipper_trips = set()
 
-        for route in current_shipper_routes:
-            current_pattern = route.pattern
-            if current_pattern.count_of_stops == 1:
-                scenario.draft_routes.remove(route)
-                continue
-            new_pattern = current_pattern.remove_shipper(shipper)
-            new_pattern.order_shippers()
-            new_pattern.calculate_deviation()
-            new_route = DirectRoute(new_pattern, route.vehicle)
-            project.context.tariffs_service.assign_ftl_mr_route(new_route)
-            scenario.draft_routes.remove(route)
-            scenario.draft_routes.add(new_route)
+        if remove_parts:
+            current_shipper_trips |= set(scenario.find_shipper_trips(shipper, "parts"))
+
+        if remove_empties:
+            current_shipper_trips |= set(scenario.find_shipper_trips(shipper, "empties"))
+
+        if not current_shipper_trips:
+            return
+
+        if not scenario.draft_trips:
+            scenario.create_draft_trips()
+
+        for trip in current_shipper_trips:
+            new_parts_route = trip.parts_route
+            new_empties_route = trip.empties_route
+
+            if (
+                    remove_parts
+                    and trip.parts_route is not None
+                    and shipper in trip.parts_route.demand.pattern.shippers
+            ):
+                current_pattern = trip.parts_route.demand.pattern
+
+                if current_pattern.count_of_stops == 1:
+                    new_parts_route = None
+                else:
+                    new_pattern = current_pattern.remove_shipper(shipper)
+                    new_pattern.order_shippers()
+                    new_pattern.calculate_deviation()
+                    new_parts_route = DirectRoute(new_pattern, trip.parts_route.vehicle)
+                    project.context.tariffs_service.assign_ftl_mr_route(new_parts_route)
+
+            if (
+                    remove_empties
+                    and trip.empties_route is not None
+                    and shipper in trip.empties_route.demand.pattern.shippers
+            ):
+                current_pattern = trip.empties_route.demand.pattern
+
+                if current_pattern.count_of_stops == 1:
+                    new_empties_route = None
+                else:
+                    new_pattern = current_pattern.remove_shipper(shipper)
+                    new_pattern.order_shippers()
+                    new_pattern.calculate_deviation()
+                    new_empties_route = DirectRoute(new_pattern, trip.empties_route.vehicle)
+                    project.context.tariffs_service.assign_ftl_mr_route(new_empties_route)
+
+            scenario.draft_trips.remove(trip)
+
+            if new_parts_route is not None or new_empties_route is not None:
+                scenario.draft_trips.add(
+                    Trip(
+                        parts_route=new_parts_route,
+                        empties_route=new_empties_route,
+                        frequency=max(
+                            new_parts_route.frequency if new_parts_route else 0,
+                            new_empties_route.frequency if new_empties_route else 0,
+                        ),
+                        roundtrip_id=trip.roundtrip_id,
+                    )
+                )
 
     @staticmethod
-    def _normalize_direct_shipper_allocations(scenario:Scenario) -> None:
+    def _normalize_direct_shipper_allocations(scenario: Scenario) -> None:
         shipper_routes = defaultdict(list)
-        for route in scenario.get_in_use_routes():
-            for shipper in route.pattern.shippers:
-                shipper_routes[shipper].append(route)
 
-        for shipper, routes in shipper_routes.items():
+        for trip in scenario.get_in_use_trips():
+            for flow_direction, route in (
+                    ("parts", trip.parts_route),
+                    ("empties", trip.empties_route),
+            ):
+                if route is None:
+                    continue
+                for shipper in route.demand.pattern.shippers:
+                    shipper_routes[(shipper, flow_direction)].append(route)
+
+        for (shipper, _flow_direction), routes in shipper_routes.items():
             total_allocation = sum(
-                route.pattern.shipper_allocation.get(shipper, 0.0)
+                route.demand.pattern.shipper_allocation.get(shipper, 0.0)
                 for route in routes
             )
 
@@ -123,26 +186,41 @@ class HubSwapService:
                 continue
 
             for route in routes:
-                current = route.pattern.shipper_allocation.get(shipper, 0.0)
-                route.pattern.shipper_allocation[shipper] = current / total_allocation
+                current = route.demand.pattern.shipper_allocation.get(shipper, 0.0)
+                route.demand.pattern.shipper_allocation[shipper] = current / total_allocation
 
     @staticmethod
     def _add_shipper_to_hub(project: Project, shipper: Shipper, hub: Hub) -> None:
         """
-        Add shipper to the assigned Hub, creating a new first leg route, already priced.
+        Add shipper to the assigned Hub, creating new first leg route(s), already priced.
         :param project: Current Project.
         :param shipper: Shipper to be added to the Hub.
         :param hub: Hub to which shipper was assigned.
         """
-        hub.shippers.append(shipper)
-        new_first_leg = FirstLegRoute(
-            shipper=shipper,
-            carrier=hub.first_leg_carrier,
-            vehicle=hub.first_leg_vehicle,
-            hub=hub
-        )
-        project.context.tariffs_service.assign_ltl_route(new_first_leg)
-        hub.first_leg_routes.add(new_first_leg)
+        if shipper not in hub.shippers:
+            hub.shippers.append(shipper)
+
+        if shipper.has_parts_demand:
+            new_parts_first_leg = FirstLegRoute(
+                shipper=shipper,
+                carrier=hub.first_leg_carrier,
+                vehicle=hub.first_leg_vehicle,
+                hub=hub,
+                flow_direction="parts",
+            )
+            project.context.tariffs_service.assign_ltl_route(new_parts_first_leg)
+            hub.parts_first_leg_routes.add(new_parts_first_leg)
+
+        if hub.has_empties_flow and shipper.has_empties_demand:
+            new_empties_first_leg = FirstLegRoute(
+                shipper=shipper,
+                carrier=hub.first_leg_carrier,
+                vehicle=hub.first_leg_vehicle,
+                hub=hub,
+                flow_direction="empties",
+            )
+            project.context.tariffs_service.assign_ltl_route(new_empties_first_leg)
+            hub.empties_first_leg_routes.add(new_empties_first_leg)
 
 
     def move_hub_shippers_to_direct(self, project: Project, cofors: list[str]) -> list[str]:
@@ -155,7 +233,8 @@ class HubSwapService:
         failed_to_move = []
         for cofor in cofors:
             shipper = scenario.hub_shippers[cofor]
-            ok = self._add_shipper_to_direct_network(project, shipper)
+            hub = scenario.find_shipper_hub(shipper)
+            ok = self._add_shipper_to_direct_network(project, shipper, add_empties=hub.has_empties_flow)
             if not ok:
                 failed_to_move.append(cofor)
                 continue
@@ -174,29 +253,67 @@ class HubSwapService:
         scenario = project.current_scenario
         hub = scenario.find_shipper_hub(shipper)
         hub.shippers.remove(shipper)
-        hub.first_leg_routes = {r for r in hub.first_leg_routes if r.shipper != shipper}
-
+        hub.parts_first_leg_routes = {
+            r for r in hub.parts_first_leg_routes if r.shipper != shipper
+        }
+        hub.empties_first_leg_routes = {
+            r for r in hub.empties_first_leg_routes if r.shipper != shipper
+        }
 
     @staticmethod
-    def _add_shipper_to_direct_network(project: Project, shipper: Shipper) -> bool:
-        """
-        Adds shipper to the current scenario direct network in a new FTL route with the default vehicle.
-        This must happen in the scenario draft. If not available, create one from existing routes.
-        :param project: Current Project.
-        :param shipper: Shipper to be moved.
-        :returns True if managed to add shipper, False otherwise.
-        """
+    def _add_shipper_to_direct_network(
+            project: Project,
+            shipper: Shipper,
+            add_empties: bool,
+    ) -> bool:
         scenario = project.current_scenario
-        if not scenario.draft_routes:
-            scenario.create_draft_routes()
-        new_pattern = RoutePattern({shipper}, project.plant)
-        new_pattern.order_shippers()
-        new_pattern.calculate_deviation()
-        new_route = DirectRoute(new_pattern, project.get_vehicle_by_id(DEFAULT_VEHICLE_ID))
-        project.context.tariffs_service.assign_ftl_mr_route(new_route)
-        if new_route.tariff_source == "Missing":
+        if not scenario.draft_trips:
+            scenario.create_draft_trips()
+
+        parts_route = None
+        empties_route = None
+
+        if shipper.has_parts_demand:
+            parts_pattern = RoutePattern({shipper}, project.plant, "parts")
+            parts_pattern.order_shippers()
+            parts_pattern.calculate_deviation()
+
+            parts_route = DirectRoute(
+                pattern=parts_pattern,
+                vehicle=project.get_vehicle_by_id(DEFAULT_VEHICLE_ID),
+            )
+            project.context.tariffs_service.assign_ftl_mr_route(parts_route)
+
+            if parts_route.tariff_source == "Missing":
+                return False
+
+        if add_empties and shipper.has_empties_demand:
+            empties_pattern = RoutePattern({shipper}, project.plant, "empties")
+            empties_pattern.order_shippers()
+            empties_pattern.calculate_deviation()
+
+            empties_route = DirectRoute(
+                pattern=empties_pattern,
+                vehicle=project.get_vehicle_by_id(DEFAULT_VEHICLE_ID),
+            )
+            project.context.tariffs_service.assign_ftl_mr_route(empties_route)
+
+            if empties_route.tariff_source == "Missing":
+                return False
+
+        if parts_route is None and empties_route is None:
             return False
-        scenario.draft_routes.add(new_route)
+
+        scenario.draft_trips.add(
+            Trip(
+                parts_route=parts_route,
+                empties_route=empties_route,
+                frequency=max(
+                    parts_route.frequency if parts_route else 0,
+                    empties_route.frequency if empties_route else 0,
+                ),
+            )
+        )
         return True
 
 

@@ -36,7 +36,7 @@ function wireModal(mode) {
 
   // shared modal close button
   document.getElementById("lbr-close")?.addEventListener("click", closeModal);
-  document.getElementById("lbr-refresh")?.addEventListener("click", () => refresh(mode));
+  document.getElementById("lbr-refresh")?.addEventListener("click", () => refreshRoutesLists(mode));
 
   // Move buttons
   document.getElementById("lbr-to-right")?.addEventListener("click", () => moveSelected(mode, "left"));
@@ -68,7 +68,8 @@ function formatRouteLabel(route) {
   const shippers = (route.sequence || []).slice().sort().join(", ");
   const freq = route.frequency ?? "—";
   const util = route.utilization;
-  return `${shippers} | Freq: ${freq} | Util: ${util}`;
+  const direction = route.flow_direction
+  return `${shippers} | ${direction} | Freq: ${freq} | Util: ${util}`;
 }
 
 // Retrieving data and rendering the lists of routes (left and right) according to mode.
@@ -89,26 +90,34 @@ async function refreshRoutesLists(mode) {
 
   // render left
   left.innerHTML = "";
-  current.forEach(route => {
-    const id = route.key;
-    left.appendChild(buildOption(id, formatRouteLabel(route)));
-  });
+    current.forEach(route => {
+      const id = route.key;
+      left.appendChild(buildOption(id, formatRouteLabel(route), route.flow_direction));
+    });
 
   // render right
-  right.innerHTML = "";
-  target.forEach(route => {
-    const id = route.key;
-    right.appendChild(buildOption(id, formatRouteLabel(route)));
-  });
+right.innerHTML = "";
+target.forEach(route => {
+  const id = route.key;
+  right.appendChild(buildOption(id, formatRouteLabel(route), route.flow_direction));
+});
 
   setError("");
 }
 
 
-function buildOption(value, label) {
+function buildOption(value, label, flowDirection) {
   const opt = document.createElement("option");
   opt.value = value;
   opt.textContent = label;
+  opt.dataset.flowDirection = flowDirection;
+
+  if (flowDirection === "parts") {
+    opt.classList.add("route-parts");
+  } else if (flowDirection === "empties") {
+    opt.classList.add("route-empties");
+  }
+
   return opt;
 }
 
@@ -118,16 +127,19 @@ async function moveSelected(mode, from) {
   const right = document.getElementById("lbr-right");
 
   const source = from === "left" ? left : right;
-  const selectedId = source.value;
-  if (!selectedId) 
-    return;
+  const selectedOption = source.selectedOptions[0];
+  if (!selectedOption) return;
+
+  const selectedId = selectedOption.value;
   const keyArray = routeIdToKey(selectedId);
+  const flowDirection = selectedOption.dataset.flowDirection;
 
   try {
     await apiPost("/api/lock_block/move", {
       mode: mode,
-      from: from,
-      route_key: keyArray
+      from_side: from,
+      route_key: keyArray,
+      flow_direction: flowDirection
     });
   } catch (e) {
     setError("Move failed: " + (e.message || e));
@@ -158,7 +170,7 @@ function setSelectOptions(sel, values, placeholder) {
 }
 
 function getManualSelection() {
-  const ids = ["lbr-s1", "lbr-s2", "lbr-s3", "lbr-s4"].map(id => document.getElementByIdd(id)?.value || "");
+  const ids = ["lbr-s1", "lbr-s2", "lbr-s3", "lbr-s4"].map(id => document.getElementById(id)?.value || "");
   return ids.filter(Boolean);
 }
 
@@ -191,7 +203,7 @@ async function confirmManual(mode) {
     setError("Add manual route failed: " + (e.message || e));
     return;
   }
-  await refresh(mode);
+  await refreshRoutesLists(mode);
 }
 
 

@@ -4,12 +4,12 @@ from domain.shipper import Shipper
 
 
 class HubAggregateDemand:
-    def __init__(self, hub, flow_type):
+    def __init__(self, hub, flow_direction):
         self.hub = hub
-        self.flow_type = flow_type
+        self.flow_direction = flow_direction
 
     def _demand(self, shipper):
-        return shipper.parts_demand if self.flow_type == "parts" else shipper.empties_demand
+        return shipper.parts_demand if self.flow_direction == "parts" else shipper.empties_demand
 
     @property
     def weight(self):
@@ -53,9 +53,9 @@ class HubAggregateDemand:
 
 
 class MilkrunPatternDemand:
-    def __init__(self, pattern: RoutePattern, flow_type: str):
+    def __init__(self, pattern: RoutePattern):
         self.pattern = pattern
-        self.flow_type = flow_type
+        self.flow_direction = pattern.flow_direction
 
     @property
     def weight(self):
@@ -99,15 +99,15 @@ class MilkrunPatternDemand:
 
 
 class ShipperDemand:
-    def __init__(self, shipper: Shipper, plant: Plant, carrier: Carrier, flow_type: str):
+    def __init__(self, shipper: Shipper, plant: Plant, carrier: Carrier, flow_direction: str):
         self.shipper = shipper
         self._plant = plant
         self._carrier = carrier
-        self.flow_type = flow_type
+        self.flow_direction = flow_direction
 
     @property
     def _demand(self):
-        return self.shipper.parts_demand if self.flow_type == "parts" else self.shipper.empties_demand
+        return self.shipper.parts_demand if self.flow_direction == "parts" else self.shipper.empties_demand
 
     @property
     def weight(self):

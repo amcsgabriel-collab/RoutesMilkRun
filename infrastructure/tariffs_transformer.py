@@ -3,8 +3,8 @@ import pandas as pd
 TARIFFS_COLUMNS_DIRECT = [
     {'raw': 'Unique_KEY', 'final': 'Tariff Key', 'dtype': 'string'},
     {'raw': 'iTMS_Mode', 'final': 'iTMS Mode', 'dtype': 'string'},
-    {'raw': 'Singletrip', 'final': 'ST', 'dtype': 'float32'},
-    {'raw': 'Roundtrip', 'final': 'RT', 'dtype': 'float32'},
+    {'raw': 'Singletrip', 'final': 'Base Cost', 'dtype': 'float32'},
+    {'raw': 'Roundtrip', 'final': 'Roundtrip Base Cost', 'dtype': 'float32'},
     {'raw': 'Currency', 'final': 'Currency', 'dtype': 'category'},
     {'raw': 'Small (0-30km)', 'final': 'Small (0-30km)', 'dtype': 'float32'},
     {'raw': 'Low (30-50 km)', 'final': 'Low (30-50 km)', 'dtype': 'float32'},
@@ -87,10 +87,8 @@ class TariffsTransformer:
         tariffs = self._filter_relevant_columns(tariffs, tariffs_type)
         tariffs = self._rename_tariffs_columns(tariffs, tariffs_type)
         tariffs = self._split_tariffs_key(tariffs)
-        tariffs = self._filter_tariffs_to_destination(tariffs, tariffs_type)
         if tariffs_type == 'ftl':
-            tariffs = self._melt_tariffs_deviation_bucket(tariffs)
-            return self._melt_tariffs_trip_type(tariffs)
+            return self._melt_tariffs_deviation_bucket(tariffs)
 
         return self._melt_tariffs_chargeable_weight(tariffs, tariffs_type)
 
@@ -128,7 +126,7 @@ class TariffsTransformer:
         part_count = parts.str.len()
 
         tariffs["Carrier Short Name"] = parts.str[0]
-        tariffs["Destination COFOR"] = parts.str[-1]
+        tariffs["Destination Code"] = parts.str[-1]
         tariffs["Origin Code"] = parts.str[-2]
         tariffs["Means of Transport"] = None
 
@@ -143,14 +141,6 @@ class TariffsTransformer:
             raise ValueError(f"Unexpected Tariff Key format with parts counts: {bad_counts}")
         return tariffs.drop(columns=["Tariff Key"])
 
-    def _filter_tariffs_to_destination(self, tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
-        if tariffs_type == 'ftl':
-            filter_array = tariffs['Destination COFOR'].eq(self.plant)
-        else:
-            destination_list = self.hubs + [self.plant]
-            filter_array = tariffs['Destination COFOR'].isin(destination_list)
-
-        return tariffs.loc[filter_array]
 
     @staticmethod
     def _melt_tariffs_deviation_bucket(tariffs: pd.DataFrame) -> pd.DataFrame:
@@ -159,10 +149,10 @@ class TariffsTransformer:
                 'Carrier Short Name',
                 'Means of Transport',
                 'Origin Code',
-                'Destination COFOR',
+                'Destination Code',
                 'iTMS Mode',
-                'ST',
-                'RT',
+                'Base Cost',
+                'Roundtrip Base Cost',
                 'Currency'
             ],
             value_vars=[
@@ -174,27 +164,6 @@ class TariffsTransformer:
             ],
             var_name='Deviation Bucket',
             value_name='Stop Cost'
-        )
-
-    @staticmethod
-    def _melt_tariffs_trip_type(tariffs: pd.DataFrame) -> pd.DataFrame:
-        return tariffs.melt(
-            id_vars=[
-                'Carrier Short Name',
-                'Means of Transport',
-                'Origin Code',
-                'Destination COFOR',
-                'iTMS Mode',
-                'Deviation Bucket',
-                'Currency',
-                'Stop Cost'
-            ],
-            value_vars=[
-                'ST',
-                'RT',
-            ],
-            var_name='Trip Type',
-            value_name='Base Cost'
         )
 
     @staticmethod
@@ -210,7 +179,7 @@ class TariffsTransformer:
                 'Carrier Short Name',
                 'Means of Transport',
                 'Origin Code',
-                'Destination COFOR',
+                'Destination Code',
                 'iTMS Mode',
                 'Currency',
                 'Min Price',

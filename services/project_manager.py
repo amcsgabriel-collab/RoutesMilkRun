@@ -2,7 +2,6 @@ from typing import Optional, Callable
 
 from domain.exceptions import CannotEditBaselineError, UnsavedScenarioError
 from domain.project import Project
-from domain.shipper import Shipper
 from services.graf_exporter import export_graf
 from services.hub_swap_service import HubSwapService
 from services.kpi_exporter import KpiExporter
@@ -62,8 +61,8 @@ class ProjectManager:
     def get_blocked_routes(self):
         return [r.shippers_keyed_summary for r in self.current_scenario.blocked_routes]
 
-    def lock_route(self, shippers_key):
-        route = self.current_scenario.find_route(shippers_key)
+    def lock_route(self, shippers_key, flow_direction):
+        route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.lock_route(route)
 
     def lock_route_manual(self, shippers_key, vehicle_id):
@@ -72,12 +71,12 @@ class ProjectManager:
             route = self.project.create_route(shippers_key, vehicle_id)
         self.current_scenario.lock_route(route)
 
-    def unlock_route(self, shippers_key):
-        route = self.current_scenario.find_route(shippers_key)
+    def unlock_route(self, shippers_key, flow_direction):
+        route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.unlock_route(route)
 
-    def block_route(self, shippers_key):
-        route = self.current_scenario.find_route(shippers_key)
+    def block_route(self, shippers_key, flow_direction):
+        route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.block_route(route)
 
     def block_route_manual(self, shippers_key, vehicle_id):
@@ -86,17 +85,17 @@ class ProjectManager:
             route = self.project.create_route(shippers_key, vehicle_id)
         self.current_scenario.block_route(route)
 
-    def unblock_route(self, shippers_key):
-        route = self.current_scenario.find_route(shippers_key)
+    def unblock_route(self, shippers_key, flow_direction):
+        route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.unblock_route(route)
 
     # ________________________________________________________________
     # HUB / DIRECT NETWORK SWAP INTERFACE
     def get_shippers_cofor_per_network(self):
         return {
-            'baseline_direct': list(self.project.current_region.scenarios['AS-IS'].direct_shippers.keys()),
+            'baseline_direct': list(self.project.current_region.scenarios['AS-IS'].hub_swap_direct_shippers),
             'baseline_hub': list(self.project.current_region.scenarios['AS-IS'].hub_shippers.keys()),
-            'current_direct': list(self.project.current_scenario.direct_shippers.keys()),
+            'current_direct': list(self.project.current_scenario.hub_swap_direct_shippers),
             'current_hub': list(self.project.current_scenario.hub_shippers.keys()),
         }
 
@@ -112,19 +111,7 @@ class ProjectManager:
         """
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        scenario =  self.current_scenario
-        print('HUB TO DIRECT: BEFORE')
-        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
-        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
-        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
-        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
         failed_shippers = self.hub_swap_service.move_hub_shippers_to_direct(self.project, hub_to_move)
-        print('HUB TO DIRECT: AFTER')
-        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
-        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
-        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
-        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
-
         return failed_shippers
 
     def move_direct_to_hub(self, direct_to_move: list[str]) -> list[str]:
@@ -136,18 +123,7 @@ class ProjectManager:
         """
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        scenario = self.current_scenario
-        print('DIRECT TO HUB: BEFORE')
-        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
-        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
-        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
-        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
         shippers_without_hub = self.hub_swap_service.move_direct_shippers_to_hub(self.project, direct_to_move)
-        print('DIRECT TO HUB: AFTER')
-        print("direct route weight:", sum(r.weight for r in scenario.get_in_use_routes()))
-        print("first leg weight:", sum(r.weight for r in scenario.first_leg_routes))
-        print("linehaul weight:", sum(r.weight for r in scenario.linehaul_routes))
-        print("hub shipper weight:", sum(s.weight for hub in scenario.get_in_use_hubs() for s in hub.shippers))
         return shippers_without_hub
 
     def manual_move_direct_to_hub(self, direct_to_move: str, assigned_hub: str) -> None:
@@ -168,7 +144,7 @@ class ProjectManager:
             raise CannotEditBaselineError()
 
         solver = Solver(self.project)
-        self.current_scenario.draft_routes = solver.run()
+        self.current_scenario.draft_trips = solver.run()
 
     # ________________________________________________________________
     # MAP
@@ -181,7 +157,7 @@ class ProjectManager:
         return KpiExporter(self.current_scenario, self.current_region.scenarios['AS-IS']).get_kpis_template()
 
     def request_export_solution(self):
-        if self.current_scenario.draft_routes:
+        if self.current_scenario.draft_trips:
             raise UnsavedScenarioError()
         return True
 
@@ -189,5 +165,5 @@ class ProjectManager:
         export_graf(
             path=filepath,
             scenario_hubs=self.current_scenario.hubs,
-            scenario_routes=self.current_scenario.routes,
+            scenario_trips=self.current_scenario.trips,
         )

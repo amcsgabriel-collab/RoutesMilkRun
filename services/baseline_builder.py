@@ -12,6 +12,7 @@ from domain.routes.direct_route import DirectRoute
 from domain.project import Scenario, SourcingRegion, ProjectContext
 from domain.routes.route_pattern import RoutePattern
 from domain.shipper import Shipper
+from domain.trip import Trip
 from infrastructure.data_loader import DataLoader
 from infrastructure.demand_data_transformer import DemandDataTransformer
 from infrastructure.graf_loader import GrafLoader
@@ -23,6 +24,7 @@ from repositories.direct_route_repository import DirectRouteRepository
 from repositories.route_pattern_repository import RoutePatternRepository
 from repositories.shipper_repository import ShipperRepository
 from repositories.tariffs_repository import ftl_tariffs_from_dataframe, ltl_tariffs_from_dataframe
+from repositories.trip_repository import TripRepository
 from repositories.vehicle_repository import VehicleRepository
 from services.tariff_service import TariffService
 
@@ -41,32 +43,52 @@ def verify_coordinates(shippers: dict[str, Shipper]):
 
 
 def verify_total_volume(route_patterns: list["RoutePattern"], shippers: list["Shipper"]):
-    share_sum_by_shipper = defaultdict(float)
-    patterns_by_shipper = defaultdict(list)
+    share_sum_by_shipper_and_flow = defaultdict(float)
+    patterns_by_shipper_and_flow = defaultdict(list)
 
     for pattern in route_patterns:
+        flow_direction = pattern.flow_direction
+
         for s, share in pattern.shipper_allocation.items():
-            cofor = s.cofor if hasattr(s, "cofor") else s  # supports dict keyed by Shipper or by cofor
+            cofor = s.cofor if hasattr(s, "cofor") else s
             share = float(share or 0.0)
-            share_sum_by_shipper[cofor] += share
-            patterns_by_shipper[cofor].append((pattern, share))
+            key = (cofor, flow_direction)
 
-    # iterate over the full shipper list (not only those seen)
-    for s in shippers:
-        cofor = s.cofor
-        total_share = share_sum_by_shipper.get(cofor, 0.0)
+            share_sum_by_shipper_and_flow[key] += share
+            patterns_by_shipper_and_flow[key].append((pattern, share))
 
-        if abs(total_share - 1.0) > 1e-6:
-            print(f"\n❌ Allocation error for shipper {cofor}")
-            print(f"Total allocation: {total_share:.6f}")
+    for shipper in shippers:
+        expected_demands = [
+            shipper.parts_demand,
+            shipper.empties_demand,
+        ]
 
-            if cofor not in patterns_by_shipper:
-                print("Patterns contributing: NONE (shipper never appears in shipper_allocation of any pattern)")
+        for demand in expected_demands:
+            # skip zero-demand flows
+            if (
+                demand.weight == 0.0
+                and demand.volume == 0.0
+                and demand.loading_meters == 0.0
+            ):
                 continue
 
-            print("Patterns contributing:")
-            for pattern, share in patterns_by_shipper[cofor]:
-                print(f"  Route: {pattern.route_name} | Allocation: {share:.6f}")
+            flow_code = "parts" if demand.type == "P" else "empties"
+            key = (shipper.cofor, flow_code)
+            total_share = share_sum_by_shipper_and_flow.get(key, 0.0)
+
+            if abs(total_share - 1.0) > 1e-6:
+                print(f"\n❌ Allocation error for shipper {shipper.cofor} / flow {demand.type}")
+                print(f"Total allocation: {total_share:.6f}")
+
+                if key not in patterns_by_shipper_and_flow:
+                    print("Patterns contributing: NONE (shipper/flow never appears in shipper_allocation of any pattern)")
+                    continue
+
+                print("Patterns contributing:")
+                for pattern, share in patterns_by_shipper_and_flow[key]:
+                    print(
+                        f"  Route: {pattern.route_name} | Flow: {pattern.flow_direction} | Allocation: {share:.6f}"
+                    )
 
 
 def validate_ftl_missing_tariffs(routes: set[DirectRoute]) -> None:
@@ -132,8 +154,6 @@ class BaselineBuilder:
         self.plant = None
         self.vehicles = None
         self.as_is_scenario = None
-
-        self.direct_routes = None
         self.tariffs_service: TariffService | None = None
 
     def _log(self, msg: str):
@@ -237,12 +257,12 @@ class BaselineBuilder:
         :return: SourcingRegion object containing baseline scenario.
         """
         hubs = self._create_hubs(region)
-        direct_routes = self._create_direct_routes(region)
+        trips = self._create_trips(region)
 
         baseline_scenario = Scenario(
             name='AS-IS',
-            routes=direct_routes,
-            hubs=set(hubs),
+            trips=trips,
+            hubs=hubs,
         )
         baseline_scenario.is_baseline = True
 
@@ -254,21 +274,22 @@ class BaselineBuilder:
 
     def _create_hubs(self, region: str) -> set[Hub]:
         """
-        Create Hub domain objects and it's dependencies for the specified sourcing region.
-        :param region:
-        :return:
+        Create Hub domain objects and its dependencies for the specified sourcing region.
         """
         region_filtered_hub_database = self.hub_demand_database[
-            self.hub_demand_database['SHIPPER SOURCING REGION'] == region]
+            self.hub_demand_database["SHIPPER SOURCING REGION"] == region
+            ]
         aggregated_demand_by_shipper = DemandDataTransformer(
-            region_filtered_hub_database).aggregate_database_by_shipper()
+            region_filtered_hub_database
+        ).aggregate_database_by_shipper()
 
         sellers = SellerRepository(region_filtered_hub_database).get_by_shipper()
         carriers = CarrierRepository(region_filtered_hub_database).get_all_hub()
+
         hub_shippers_by_cofor = ShipperRepository(aggregated_demand_by_shipper).get_all(
             sellers_by_shipper=sellers,
-            carriers=carriers['first_leg'],
-            are_hub_shippers=True
+            carriers=carriers["first_leg"],
+            are_hub_shippers=True,
         )
         verify_coordinates(hub_shippers_by_cofor)
 
@@ -276,53 +297,74 @@ class BaselineBuilder:
             shippers=hub_shippers_by_cofor,
             carriers=carriers,
             vehicles=self.vehicles,
-            plant=self.plant)
+            plant=self.plant,
+        )
 
         self._assign_hub_tariffs(hubs)
         return hubs
 
-    def _assign_hub_tariffs(self, hubs: list[Hub]) -> None:
-        """ Retrieve and assign tariffs to hub first leg and linehaul routes. """
+    def _assign_hub_tariffs(self, hubs: set[Hub]) -> None:
+        """Retrieve and assign tariffs to hub first leg and linehaul routes."""
         for hub in hubs:
-            self.tariffs_service.assign_ltl_routes(hub.first_leg_routes)
-            validate_ltl_missing_tariffs(hub.first_leg_routes)
+            self.tariffs_service.assign_ltl_routes(hub.parts_first_leg_routes)
+            validate_ltl_missing_tariffs(hub.parts_first_leg_routes)
+
+            if hub.has_empties_flow:
+                self.tariffs_service.assign_ltl_routes(hub.empties_first_leg_routes)
+                validate_ltl_missing_tariffs(hub.empties_first_leg_routes)
 
             if hub.linehaul_transport_concept in {"FTL", "MR"}:
-                self.tariffs_service.assign_linehaul(hub.linehaul_route)
+                self.tariffs_service.assign_linehaul(hub.parts_linehaul_route)
+                if hub.has_empties_flow:
+                    self.tariffs_service.assign_linehaul(hub.empties_linehaul_route)
             else:
-                self.tariffs_service.assign_ltl_linehaul(hub.linehaul_route)
-            validate_linehaul_missing_tariffs(hub.linehaul_route)
+                self.tariffs_service.assign_ltl_linehaul(hub.parts_linehaul_route)
+                if hub.has_empties_flow:
+                    self.tariffs_service.assign_ltl_linehaul(hub.empties_linehaul_route)
 
+            validate_linehaul_missing_tariffs(hub.parts_linehaul_route)
+            if hub.has_empties_flow:
+                validate_linehaul_missing_tariffs(hub.empties_linehaul_route)
 
-    def _create_direct_routes(self, region):
+    def _create_trips(self, region) -> set[Trip]:
         direct_demand_for_region = self.direct_demand_database[
-            self.direct_demand_database['SHIPPER SOURCING REGION'] == region]
+            self.direct_demand_database["SHIPPER SOURCING REGION"] == region
+            ]
 
         # Creating Direct network objects
         direct_sellers = SellerRepository(direct_demand_for_region).get_by_shipper()
         direct_carriers = CarrierRepository(direct_demand_for_region).get_all()
         aggregated_direct_demand_by_shipper = DemandDataTransformer(
-            direct_demand_for_region).aggregate_database_by_shipper()
+            direct_demand_for_region
+        ).aggregate_database_by_shipper()
+
         direct_shippers_by_cofor = ShipperRepository(
             aggregated_direct_demand_by_shipper
         ).get_all(
             carriers=direct_carriers,
-            sellers_by_shipper=direct_sellers
+            sellers_by_shipper=direct_sellers,
         )
         verify_coordinates(shippers=direct_shippers_by_cofor)
 
         aggregated_direct_demand_by_route = DemandDataTransformer(
-            direct_demand_for_region).aggregated_database_by_route()
+            direct_demand_for_region
+        ).aggregated_database_by_route()
+
         route_patterns_by_vehicle = RoutePatternRepository(
             aggregated_direct_demand_by_route,
-            distance_function=make_haversine_cache()
+            distance_function=make_haversine_cache(),
         ).get_all(
             shippers_by_cofor=direct_shippers_by_cofor,
             plant=self.plant,
         )
+
         verify_total_volume(
-            route_patterns=[pattern for vehicle_set in route_patterns_by_vehicle.values() for pattern in vehicle_set],
-            shippers=[s for s in direct_shippers_by_cofor.values()]
+            route_patterns=[
+                pattern
+                for vehicle_set in route_patterns_by_vehicle.values()
+                for pattern in vehicle_set
+            ],
+            shippers=[s for s in direct_shippers_by_cofor.values()],
         )
 
         direct_routes = DirectRouteRepository(
@@ -333,4 +375,22 @@ class BaselineBuilder:
         self.tariffs_service.assign_ftl_mr_routes(direct_routes)
         validate_ftl_missing_tariffs(direct_routes)
 
-        return direct_routes
+        parts_routes = {
+            route
+            for route in direct_routes
+            if route.demand.flow_direction == "parts"
+        }
+        empties_routes = {
+            route
+            for route in direct_routes
+            if route.demand.flow_direction == "empties"
+        }
+
+        trips = TripRepository(
+            aggregated_direct_demand_by_route
+        ).get_all(
+            parts_routes=parts_routes,
+            empties_routes=empties_routes,
+        )
+
+        return trips

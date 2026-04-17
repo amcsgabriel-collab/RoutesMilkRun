@@ -9,10 +9,10 @@ from domain.tariff import FtlTariff
 
 
 class DirectRoute(Route):
-    def __init__(self, pattern: RoutePattern, vehicle: Vehicle, flow_type: str):
+    def __init__(self, pattern: RoutePattern, vehicle: Vehicle):
         super().__init__(
             vehicle=vehicle,
-            demand=MilkrunPatternDemand(pattern=pattern, flow_type=flow_type),
+            demand=MilkrunPatternDemand(pattern=pattern),
             costing=TruckBasedCosting(),
         )
         self.tariff: FtlTariff | None = None
@@ -23,23 +23,28 @@ class DirectRoute(Route):
     def __eq__(self, other):
         return (isinstance(other, DirectRoute)
                 and self.demand.pattern == other.demand.pattern
-                and self.demand.vehicle == other.vehicle)
+                and self.vehicle == other.vehicle)
 
     @property
     def destination(self):
         return self.demand.pattern.plant
 
     @property
-    def summary(self):
+    def roundtrip_total_cost(self):
+        return self.costing.roundtrip_route_cost(self) * self.frequency
+
+    def get_total_cost(self, is_roundtrip: bool) -> float:
+        return self.roundtrip_total_cost if is_roundtrip else self.total_cost
+
+    def summary(self, is_roundtrip: bool):
         return {
             "name": self.demand.pattern.route_name,
             "vehicle": self.vehicle.id,
-            "base_cost": self.tariff.base_cost,
+            "base_cost": self.tariff.roundtrip_base_cost if is_roundtrip else self.tariff.base_cost,
             "stop_cost": self.tariff.stop_cost,
             "weight_utilization": self.weight_utilization,
             "volume_utilization": self.volume_utilization,
             "loading_meters_utilization": self.loading_meters_utilization,
-            "frequency": self.frequency,
             "shippers": [shipper.cofor for shipper in self.demand.pattern.shippers],
         }
 
@@ -48,14 +53,14 @@ class DirectRoute(Route):
         sequence = [s.cofor for s in self.demand.pattern.sequence]
         return {
             "key": "|".join(sequence),
+            "flow_direction": self.demand.flow_direction,
             "sequence": sequence,
             "frequency": self.frequency,
-            "utilization": f"{self.max_utilization * 100:.2f}%",
-            "cost": f"{self.total_cost:.2f}€",
+            "utilization": f"{self.max_utilization:.2f}%",
         }
 
     def generate_route_name(self):
-        direction = "P" if self.demand.flow_type == "parts" else "E"
+        direction = "P" if self.demand.flow_direction == "parts" else "E"
         return f"{self.demand.pattern.starting_point.cofor}_{self.demand.pattern.plant.cofor}#{direction}"
 
     @property
@@ -69,17 +74,18 @@ class DirectRoute(Route):
             if self.demand.pattern.transport_concept == "FTL" \
             else f"M{self.demand.pattern.mr_cluster}_{self.demand.pattern.starting_point.cofor}_{self.demand.pattern.plant.cofor}#PS"
 
-    def export_dataframe(self, tour_name:str, roundtrip_id:str) -> pd.DataFrame:
+    def export_dataframe(self, tour_name:str, roundtrip_id:str, frequency: int) -> pd.DataFrame:
         rows = []
         shippers = sorted(
             self.demand.pattern.shippers,
             key=lambda s: ((s.name or "").lower(), (s.cofor or "").lower())
         )
-
+        flow_direction = self.demand.flow_direction
         first_route_row = True
         for shipper in shippers:
+            demand = shipper.parts_demand if flow_direction == "parts" else shipper.empties_demand
             sellers = sorted(
-                shipper.sellers,
+                demand.sellers,
                 key=lambda s: ((s.name or "").lower(), (s.cofor or "").lower())
             )
 
@@ -92,10 +98,10 @@ class DirectRoute(Route):
                     'Seller COFOR': seller.cofor,
                     'Hybrid COFOR': seller.cofor,
                     'Plant COFOR': self.demand.plant.cofor,
-                    'Parts or Empties': "P" if self.demand.flow_type == "parts" else "E",
+                    'Parts or Empties': flow_direction[0].upper(),
                     'Index of MR': self.demand.pattern.sequence.index(shipper) + 1,
                     'Roundtrip Identifier': roundtrip_id,
-                    'Docks (,)': '',
+                    'Docks (,)': seller.docks,
                     'First pickup': '',
                     'Total transit time (days)': '',
                     'First delivery': '',
@@ -147,9 +153,9 @@ class DirectRoute(Route):
                     'PLE: HRQ/HEE Dock 6': '',
                     'PLE: HRQ/HEE Dock 7': '',
                     'PLE: HRQ/HEE Dock 8': '',
-                    'Avg. Loading Meters / week': shipper.loading_meters if first_shipper_row else '',
-                    'Avg. Weight / week': shipper.weight if first_shipper_row else '',
-                    'Avg. Volume / week': shipper.volume if first_shipper_row else '',
+                    'Avg. Loading Meters / week': demand.loading_meters if first_shipper_row else '',
+                    'Avg. Weight / week': demand.weight if first_shipper_row else '',
+                    'Avg. Volume / week': demand.volume if first_shipper_row else '',
                     'Avg. Loading Meters / week on route': self.demand.pattern.loading_meters if first_route_row else '',
                     'Avg. Loading Meters / transport': self.demand.pattern.loading_meters / self.frequency if (
                             first_route_row and self.frequency) else (0 if first_route_row else ''),

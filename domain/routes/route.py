@@ -19,7 +19,7 @@ class Route(metaclass=ABCMeta):
     )
 
     def __init__(self, vehicle: Vehicle, demand, costing):
-        super.__init__(self)
+        super().__init__()
         self.vehicle = vehicle
         self.demand = demand
         self.costing = costing
@@ -64,18 +64,18 @@ class Route(metaclass=ABCMeta):
     def starting_point(self):
         return self.demand.starting_point
 
-    @abstractmethod
     @property
+    @abstractmethod
     def destination(self):
         pass
 
     @property
     def commercial_origin(self):
-        return self.starting_point if self.demand.flow_type == "parts" else self.destination
+        return self.starting_point if self.demand.flow_direction == "parts" else self.destination
 
     @property
     def commercial_destination(self):
-        return self.destination if self.demand.flow_type == "parts" else self.starting_point
+        return self.destination if self.demand.flow_direction == "parts" else self.starting_point
 
     @property
     def weight(self):
@@ -84,6 +84,10 @@ class Route(metaclass=ABCMeta):
     @property
     def volume(self):
         return self.demand.volume
+
+    @property
+    def has_demand(self):
+        return self.weight != 0 and self.volume != 0 and self.loading_meters != 0
 
     @property
     def loading_meters(self):
@@ -111,20 +115,7 @@ class Route(metaclass=ABCMeta):
 
     @property
     def tariff_key_bundle(self):
-        full_key = self.costing.build_tariff_key(self)
-        if self.demand.flow_type == "parts":
-            return [
-                ("zip", self.costing.build_tariff_key(self, 2)[:4]), # By zip + country, 2 digits only
-                ("zip", self.costing.build_tariff_key(self, 3)[:4]), # By zip + country, 3 digits
-                ("zip", self.costing.build_tariff_key(self, 5)[:4]), # By zip + country, all 5 digits
-                ("cofor", full_key[:3] + (full_key[4],)), # Finally, by COFOR.
-            ]
-        return [
-            ("zip", self.costing.build_tariff_key(self, 2)[:4]), # By zip + country, 2 digits only
-            ("zip", self.costing.build_tariff_key(self, 3)[:4]), # By zip + country, 3 digits
-            ("zip", self.costing.build_tariff_key(self, 5)[:4]), # By zip + country, all 5 digits
-            ("cofor", full_key[:3] + (full_key[4],)), # Finally, by COFOR.
-        ]
+        return self.costing.build_tariff_bundle(self)
 
     @property
     def route_cost(self):

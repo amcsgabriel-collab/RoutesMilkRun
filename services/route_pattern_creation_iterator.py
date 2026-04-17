@@ -8,6 +8,7 @@ from domain.shipper import Shipper
 def iterate_creation_of_route_patterns(
         shippers: set[Shipper],
         existing_patterns: set[RoutePattern],
+        flow_direction: str,
         plant: Plant,
         max_stops: int = 4,
         blocked_combinations: set[RoutePattern] | None = None
@@ -45,7 +46,11 @@ def iterate_creation_of_route_patterns(
                 candidate = existing.copy()
                 candidate.reset_allocation()
             else:
-                candidate = RoutePattern(combination, plant)
+                candidate = RoutePattern(
+                    shippers=combination,
+                    plant=plant,
+                    flow_direction=flow_direction
+                )
                 route_id += 1
                 candidate.route_name = route_id
                 candidate.is_new_pattern = True

@@ -17,7 +17,7 @@ def _tariff_bundle(route, common):
     k3 = _flow_endpoints(route, 3)
     k5 = _flow_endpoints(route, 5)
 
-    if route.demand.flow_type == "parts":
+    if route.demand.flow_direction == "parts":
         return [
             ("zip", common + (k2["origin_zip"], k2["destination_cofor"])),
             ("zip", common + (k3["origin_zip"], k3["destination_cofor"])),
@@ -79,3 +79,9 @@ class TruckBasedCosting:
         if route.tariff is None:
             return 0.0
         return route.tariff.price_for_stops(route.demand.count_of_stops, route.demand.deviation)
+
+    @staticmethod
+    def roundtrip_route_cost(route: Route) -> float:
+        if route.tariff is None:
+            return 0.0
+        return route.tariff.roundtrip_price_for_stops(route.demand.count_of_stops, route.demand.deviation)
