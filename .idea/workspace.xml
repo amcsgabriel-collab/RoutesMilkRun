@@ -5,26 +5,108 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="6209f30f-32f5-49da-b9ce-970dbb10e034" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/hub.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/hub.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/regional_hub_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/regional_hub_view.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/routes/linehaul_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/linehaul_route.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/routes/route.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/route.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/routes/route_costing_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/routes/route_costing_strategies.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/scenario.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/domain/shipper.py" beforeDir="false" afterPath="$PROJECT_DIR$/domain/shipper.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/infrastructure/tariffs_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/infrastructure/tariffs_transformer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/repositories/tariffs_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/repositories/tariffs_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/baseline_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/baseline_builder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/hub_swap_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/hub_swap_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/map_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/map_generator.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/project_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/project_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/tariff_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/services/tariff_service.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/js/ui/hubs_table_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/web/js/ui/hubs_table_modal.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/js/ui/swap_hub_direct.js" beforeDir="false" afterPath="$PROJECT_DIR$/web/js/ui/swap_hub_direct.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/js/views/project.js" beforeDir="false" afterPath="$PROJECT_DIR$/web/js/views/project.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/web/views_html/hubs_table_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/web/views_html/hubs_table_modal.html" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/4flow-rob/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/4flow-rob/backend/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/backend/app.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/data_structures.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/data_structures.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/demand.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/demand.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/domain_algorithms.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/domain_algorithms.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/exceptions.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/exceptions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/general_algorithms.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/general_algorithms.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/hub.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/hub.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/kpi_set.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/kpi_set.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/project.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/project.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/regional_hub_view.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/regional_hub_view.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/direct_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/direct_route.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/first_leg_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/first_leg_route.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/linehaul_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/linehaul_route.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/route.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/route.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/route_costing_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/route_costing_strategies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/route_demand_aggregation_strategies.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/route_demand_aggregation_strategies.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/routes/route_pattern.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/routes/route_pattern.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/scenario.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/scenario.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/shipper.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/shipper.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/tariff.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/tariff.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/domain/trip.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/domain/trip.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/helper_files/hubs.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/helper_files/hubs.xlsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/helper_files/locations.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/helper_files/locations.xlsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/helper_files/vehicles.csv" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/helper_files/vehicles.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/infrastructure/data_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/demand_data_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/infrastructure/demand_data_transformer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/graf_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/infrastructure/graf_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/infrastructure/tariffs_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/infrastructure/tariffs_transformer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/paths.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/paths.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pywebview_main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/pywebview_main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/data_structures_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/data_structures_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/direct_route_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/direct_route_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/hub_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/hub_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/project_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/project_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/route_pattern_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/route_pattern_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/shipper_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/shipper_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/tariffs_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/tariffs_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/trip_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/trip_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/repositories/vehicle_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/repositories/vehicle_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/baseline_builder.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/baseline_builder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/graf_exporter.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/graf_exporter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/hub_swap_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/hub_swap_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/kpi_exporter.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/kpi_exporter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/map_generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/map_generator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/project_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/project_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/project_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/project_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/roundtrip_combination_algorithm.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/roundtrip_combination_algorithm.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/route_pattern_creation_iterator.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/route_pattern_creation_iterator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/scenario_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/scenario_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/solver.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/solver.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/tariff_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/tariff_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/vehicle_permutation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/services/vehicle_permutation_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/domain/test_operational_routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/domain/test_operational_routes.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/domain/test_route_patterns.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/domain/test_route_patterns.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/domain/test_shippers.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/domain/test_shippers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/factories.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/factories.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/infrastructure/test_data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/infrastructure/test_data_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/infrastructure/vehicles.csv" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/infrastructure/vehicles.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/repositories/test_vehicle_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/repositories/test_vehicle_repository.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/services/test_solver.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/services/test_solver.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/services/test_tariffs_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/services/test_tariffs_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/services/test_vehicle_permutation_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/tests/services/test_vehicle_permutation_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/4flow_seal_icon.ico" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/4flow_seal_icon.ico" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/icon.png" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/icon.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/icon_improved.ico" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/icon_improved.ico" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/api.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/api.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/app.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/app.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/create_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/create_modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/hubs_table_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/hubs_table_modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/kpis_page_rendering.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/kpis_page_rendering.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/lock_block_routes_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/lock_block_routes_modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/overlay.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/overlay.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/routes_table_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/routes_table_modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/shippers_table_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/shippers_table_modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/solver_logbox.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/solver_logbox.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/swap_hub_direct.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/swap_hub_direct.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/swap_resolve_missing.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/swap_resolve_missing.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/ui/vehicles_table_modal.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/ui/vehicles_table_modal.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/utils.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/utils.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/views/project.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/views/project.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/js/views/start.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/js/views/start.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/style.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/create_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/create_modal.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/hubs_table_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/hubs_table_modal.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/kpi_summary.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/kpi_summary.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/lock_block_routes_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/lock_block_routes_modal.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/project.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/project.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/project_backup.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/project_backup.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/routes_table_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/routes_table_modal.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/shippers_table_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/shippers_table_modal.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/solver_logbox.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/solver_logbox.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/start.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/start.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/swap_hub_direct.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/swap_hub_direct.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/swap_resolve_missing.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/swap_resolve_missing.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/vehicles_add_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/vehicles_add_modal.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web/views_html/vehicles_table_modal.html" beforeDir="false" afterPath="$PROJECT_DIR$/src/4flow-rob/web/views_html/vehicles_table_modal.html" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -58,68 +140,68 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "DefaultHtmlFileTemplate": "HTML File",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python tests.Python tests in test_all.py.executor": "Run",
-    "Python tests.Python tests in test_data_loader.py.executor": "Run",
-    "Python tests.Python tests in test_html.py.executor": "Run",
-    "Python tests.Python tests in test_operational_routes.py.executor": "Run",
-    "Python tests.Python tests in test_route_patterns.py.executor": "Run",
-    "Python tests.Python tests in test_routes.py.executor": "Run",
-    "Python tests.Python tests in test_shippers.py.executor": "Run",
-    "Python tests.Python tests in test_solver.py.executor": "Run",
-    "Python tests.Python tests in test_tariffs_service.py.executor": "Run",
-    "Python tests.Python tests in test_vehicle_loader.py.executor": "Run",
-    "Python tests.Python tests in test_vehicle_permutation_service.py.executor": "Run",
-    "Python tests.Python tests in test_vehicle_repository.py.executor": "Run",
-    "Python.app.executor": "Run",
-    "Python.data_preparation.executor": "Run",
-    "Python.debugger.executor": "Run",
-    "Python.interface.executor": "Run",
-    "Python.main.executor": "Run",
-    "Python.map_generation.executor": "Run",
-    "Python.metrics.executor": "Run",
-    "Python.operational_route.executor": "Run",
-    "Python.project_main_window.executor": "Run",
-    "Python.pywebview_main.executor": "Run",
-    "Python.router.executor": "Run",
-    "Python.solver.executor": "Run",
-    "Python.starting_window.executor": "Run",
-    "Python.tariffs.executor": "Run",
-    "Python.test_router.executor": "Run",
-    "Python.testingthe_html.executor": "Run",
-    "Python.vehicle_loader.executor": "Run",
-    "Python.vehicle_repository.executor": "Run",
-    "Python.vrp_solver.executor": "Run",
-    "RunOnceActivity.MCP Project settings loaded": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "ai.playground.ignore.import.keys.banner.in.settings": "true",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "database.data.extractors.current.export.id": "Semicolon-separated_id",
-    "database.data.extractors.current.id": "Semicolon-separated_id",
-    "git-widget-placeholder": "testing__different__solver",
-    "junie.onboarding.icon.badge.shown": "true",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "reference.settingsdialog.IDE.editor.colors",
-    "to.speed.mode.migration.done": "true",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python tests.Python tests in test_all.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_data_loader.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_html.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_operational_routes.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_route_patterns.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_routes.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_shippers.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_solver.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_tariffs_service.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_vehicle_loader.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_vehicle_permutation_service.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python tests.Python tests in test_vehicle_repository.py.executor&quot;: &quot;Run&quot;,
+    &quot;Python.app.executor&quot;: &quot;Run&quot;,
+    &quot;Python.data_preparation.executor&quot;: &quot;Run&quot;,
+    &quot;Python.debugger.executor&quot;: &quot;Run&quot;,
+    &quot;Python.interface.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.map_generation.executor&quot;: &quot;Run&quot;,
+    &quot;Python.metrics.executor&quot;: &quot;Run&quot;,
+    &quot;Python.operational_route.executor&quot;: &quot;Run&quot;,
+    &quot;Python.project_main_window.executor&quot;: &quot;Run&quot;,
+    &quot;Python.pywebview_main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.router.executor&quot;: &quot;Run&quot;,
+    &quot;Python.solver.executor&quot;: &quot;Run&quot;,
+    &quot;Python.starting_window.executor&quot;: &quot;Run&quot;,
+    &quot;Python.tariffs.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test_router.executor&quot;: &quot;Run&quot;,
+    &quot;Python.testingthe_html.executor&quot;: &quot;Run&quot;,
+    &quot;Python.vehicle_loader.executor&quot;: &quot;Run&quot;,
+    &quot;Python.vehicle_repository.executor&quot;: &quot;Run&quot;,
+    &quot;Python.vrp_solver.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;database.data.extractors.current.export.id&quot;: &quot;Semicolon-separated_id&quot;,
+    &quot;database.data.extractors.current.id&quot;: &quot;Semicolon-separated_id&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.IDE.editor.colors&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\src\4flow-rob" />
       <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\web" />
       <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\backend" />
       <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\static" />
       <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\web\js\views" />
-      <recent name="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\web\views_html" />
     </key>
   </component>
   <component name="RunManager" selected="Python.pywebview_main">
@@ -206,7 +288,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="RUN_TOOL" value="" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/pywebview_main.py" />
+      <option name="SCRIPT_NAME" value="C:\Users\g.alvesdemoraescorr\PycharmProjects\RoutesMilkRun\src\4flow-rob\pywebview_main.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -227,7 +309,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="RUN_TOOL" value="" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/services/test_solver.py&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/src/4flow-rob/tests/services/test_solver.py&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
@@ -268,13 +350,28 @@
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/pywebview_main.py</url>
+          <url>file://$PROJECT_DIR$/src/4flow-rob/pywebview_main.py</url>
           <line>1</line>
           <option name="timeStamp" value="2" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/4flow-rob/domain/routes/direct_route.py</url>
+          <option name="timeStamp" value="3" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
