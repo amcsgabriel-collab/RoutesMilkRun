@@ -18,7 +18,8 @@ dependencies = [
     "numpy",
     "folium",
     "pulp",
-    "openpyxl"
+    "openpyxl",
+    "pyxlsb"
 ]
 
 [tool.setuptools.packages.find]
