@@ -8,6 +8,17 @@ version = "0.1.0"
 description = "Your package description"
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = [
+    "pywebview",
+    "flask",
+    "flask_cors",
+    "werkzeug",
+    "pandas>=3.0.2",
+    "haversine",
+    "numpy",
+    "folium",
+    "pulp"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

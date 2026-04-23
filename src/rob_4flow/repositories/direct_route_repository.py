@@ -1,7 +1,7 @@
-from domain.data_structures import Vehicle
-from domain.exceptions import MissingVehiclesInHelperFileError
-from domain.routes.direct_route import DirectRoute
-from domain.routes.route_pattern import RoutePattern
+from ..domain.data_structures import Vehicle
+from ..domain.exceptions import MissingVehiclesInHelperFileError
+from ..domain.routes.direct_route import DirectRoute
+from ..domain.routes.route_pattern import RoutePattern
 
 
 class DirectRouteRepository:
