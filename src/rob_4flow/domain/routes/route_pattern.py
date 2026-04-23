@@ -1,0 +1,138 @@
+import copy
+
+from ..shipper import Shipper
+from ..data_structures import Plant
+from ..domain_algorithms import get_deviation_bin, greedy_nearest_neighbor, make_haversine_cache
+
+
+class RoutePattern:
+    count_of_stops: int
+    starting_point: Shipper
+    sequence: tuple[Shipper]
+    leg_distance: tuple[float]
+
+    def __init__(
+            self,
+            shippers: set[Shipper],
+            plant: Plant,
+            flow_direction: str,
+            route_name: str | None = None,
+            tour: str | None = None,
+            mr_overutilization_rate: float = 0.05,
+    ):
+        self.count_of_stops = len(shippers)
+        # if self.count_of_stops > 4:
+        #     shipper_cofors = [s.cofor for s in shippers]
+        #     raise ValueError(f'Milkrun routes cannot have more than 4 stops. Route {route_name} got {self.count_of_stops}: {", ".join(shipper_cofors)}')
+        if self.count_of_stops == 0:
+            raise ValueError(f'Passed shippers list for Route {route_name} is empty. Please verify.')
+        self.shippers = frozenset(shippers)
+        self.flow_direction = flow_direction
+        self.is_new_pattern = False
+        self.plant = plant
+        self.route_name = route_name
+        self.tour = tour
+        self.starting_point = None
+        self.sequence = None
+        self.shipper_allocation = {shipper: 1 for shipper in shippers}
+        self._leg_distance = None
+        self._position = None
+        self.deviation = None
+        self.deviation_bin = None
+        self.mr_cluster = None
+
+        self.carriers = {s.carrier.group for s in shippers}
+        if len(self.carriers) > 1:
+            raise ValueError(f'Route {route_name}: Milkrun routes cannot have more than one carrier.')
+        self.carrier = self.carriers.pop()
+
+        self.transport_concept = "MR" if self.count_of_stops > 1 else "FTL"
+        self.overutilization = 1.0 + (mr_overutilization_rate if self.transport_concept == "MR" else 0)
+
+    def __eq__(self, other):
+        return (isinstance(other, RoutePattern)
+                and self.shippers == other.shippers
+                and self.route_name == other.route_name
+                and self.flow_direction == other.flow_direction
+                )
+
+    def __hash__(self):
+        return hash((self.shippers, self.route_name, self.flow_direction))
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+    @property
+    def shippers_key(self):
+        return tuple(sorted(s.cofor for s in self.shippers))
+
+    def _demand(self, shipper: Shipper):
+        return shipper.parts_demand if self.flow_direction == "parts" else shipper.empties_demand
+
+    @property
+    def weight(self):
+        return sum(self._demand(shipper).weight * allocation for shipper, allocation in self.shipper_allocation.items())
+
+    @property
+    def volume(self):
+        return sum(self._demand(shipper).volume * allocation for shipper, allocation in self.shipper_allocation.items())
+
+    @property
+    def loading_meters(self):
+        return sum(self._demand(shipper).loading_meters * allocation for shipper, allocation in self.shipper_allocation.items())
+
+    def reset_allocation(self):
+        for shipper in self.shipper_allocation.keys():
+            self.shipper_allocation[shipper] = 1
+
+    def order_shippers(self, distance_function=make_haversine_cache()):
+        self.starting_point = max(
+            self.shippers,
+            key=lambda p: distance_function(p.coordinates, self.plant.coordinates)
+        )
+        remaining = [p for p in self.shippers if p != self.starting_point]
+
+        self.sequence, leg_distances = greedy_nearest_neighbor(
+            starting_point=self.starting_point,
+            remaining=remaining,
+            plant=self.plant,
+            dist_function=distance_function
+        )
+        self._leg_distance = {
+            shipper: leg_distances[idx]
+            for idx, shipper in enumerate(self.sequence)
+        }
+
+    def calculate_deviation(self, distance_function=make_haversine_cache()):
+        self.deviation = 0
+
+        if self.count_of_stops > 1:
+            distance_direct = distance_function(self.sequence[0].coordinates, self.plant.coordinates)
+            self.deviation = round((sum(self._leg_distance.values()) - distance_direct) / (self.count_of_stops - 1), 3)
+
+        self.deviation_bin, self.mr_cluster = get_deviation_bin(self.deviation)
+
+    def remove_shipper(self, shipper: Shipper) -> "RoutePattern":
+        if shipper not in self.shippers:
+            raise ValueError("Shipper not in route pattern")
+
+        new_shippers = set(self.shippers)
+        new_shippers.remove(shipper)
+
+        if not new_shippers:
+            raise ValueError("Cannot create a route pattern with no shippers")
+
+        new_pattern = RoutePattern(
+            shippers=new_shippers,
+            plant=self.plant,
+            flow_direction=self.flow_direction,
+        )
+        new_pattern.shipper_allocation = {
+            s: self.shipper_allocation[s]
+            for s in new_shippers
+        }
+        new_pattern.is_new_pattern = self.is_new_pattern
+        return new_pattern
+
+    def get_name(self, roundtrip_id):
+        return f'{self.starting_point.cofor}_{roundtrip_id}'

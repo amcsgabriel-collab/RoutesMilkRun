@@ -1,0 +1,71 @@
+<!-- views_html/lock_block_routes_modal.html -->
+<div class="modal-header">
+    <h3 id="lbr-title">Lock / Block Routes</h3>
+</div>
+
+<div class="modal-body">
+
+    <div id="lbr-error" class="modal-error" style="display:none"></div>
+
+    <div class="lbr-grid">
+        <div class="lbr-lefthead" id="lbr-left-title">Current Routes</div>
+        <div></div>
+        <div class="lbr-righthead" id="lbr-right-title">Target Routes</div>
+
+        <div class="lbr-top-actions">
+            <button id="lbr-add">Add manual route</button>
+            <button id="lbr-refresh">Refresh</button>
+        </div>
+
+        <div class="lbr-col">
+            <select id="lbr-left" size="18" class="lbr-list"></select>
+        </div>
+
+        <div class="lbr-arrows">
+            <button id="lbr-to-right" class="lbr-arrow" title="Move to right">▶</button>
+            <button id="lbr-to-left" class="lbr-arrow" title="Move to left">◀</button>
+        </div>
+
+        <div class="lbr-col">
+            <select id="lbr-right" size="18" class="lbr-list"></select>
+        </div>
+    </div>
+
+    <div class="lbr-footer">
+        <button id="lbr-close">Close</button>
+    </div>
+
+    <!-- Manual add panel (inline, hidden by default) -->
+    <div id="lbr-manual" class="lbr-manual hidden">
+        <div class="lbr-manual-title">Add Manual Route (up to 4 suppliers)</div>
+
+        <div class="lbr-manual-grid">
+            <div class="lbr-manual-row">
+                <label>Supplier 1</label>
+                <select id="lbr-s1"></select>
+            </div>
+            <div class="lbr-manual-row">
+                <label>Supplier 2</label>
+                <select id="lbr-s2"></select>
+            </div>
+            <div class="lbr-manual-row">
+                <label>Supplier 3</label>
+                <select id="lbr-s3"></select>
+            </div>
+            <div class="lbr-manual-row">
+                <label>Supplier 4</label>
+                <select id="lbr-s4"></select>
+            </div>
+            <div class="lbr-manual-row">
+                <label>Vehicle</label>
+                <select id="lbr-vehicle"></select>
+            </div>
+        </div>
+
+        <div class="lbr-manual-actions">
+            <button id="lbr-manual-cancel">Cancel</button>
+            <button id="lbr-manual-confirm" class="btn-primary">Confirm</button>
+        </div>
+    </div>
+
+</div>
