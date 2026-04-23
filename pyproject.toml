@@ -13,7 +13,7 @@ dependencies = [
     "flask",
     "flask_cors",
     "werkzeug",
-    "pandas>=3.0.2",
+    "pandas",
     "haversine",
     "numpy",
     "folium",
