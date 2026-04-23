@@ -29,6 +29,18 @@ class RegionalHubView:
     region: str
 
     @property
+    def coordinates(self):
+        return self.core_hub.coordinates
+
+    @property
+    def plant(self):
+        return self.core_hub.plant
+
+    @property
+    def formatted_coordinates(self):
+        return self.core_hub.formatted_coordinates
+
+    @property
     def cofor(self) -> str:
         return self.core_hub.cofor
 
@@ -39,6 +51,10 @@ class RegionalHubView:
     @property
     def has_empties_flow(self) -> bool:
         return self.core_hub.has_empties_flow
+
+    @property
+    def summary(self):
+        return self.core_hub.summary
 
     @property
     def shippers(self):

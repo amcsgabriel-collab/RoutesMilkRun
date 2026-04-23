@@ -1,4 +1,5 @@
 from domain.data_structures import Vehicle, Carrier
+from domain.domain_algorithms import get_deviation_bin
 from domain.routes.route import Route
 from domain.routes.route_costing_strategies import TruckBasedCosting, WeightBasedCosting
 from domain.routes.route_demand_aggregation_strategies import HubAggregateDemand

@@ -48,11 +48,23 @@ class WeightBasedCosting:
         return get_hub_weight_bracket(self.chargeable_weight(route))
 
     def build_tariff_bundle(self, route: Route) -> list[tuple[str, tuple]]:
-        """
-        Returns lookup candidates in priority order.
-        """
+        carrier_group = route.carrier.group
+
+        # Linehaul routes: try both LTL and HUB weight brackets
+        if route.__class__.__name__ == "LinehaulRoute":
+            ltl_common = (
+                carrier_group,
+                self.weight_bracket_ltl(route),
+            )
+            hub_common = (
+                carrier_group,
+                self.weight_bracket_hub(route),
+            )
+            return _tariff_bundle(route, ltl_common) + _tariff_bundle(route, hub_common)
+
+        # First-leg and everything else: normal LTL bracket only
         common = (
-            route.carrier.group,
+            carrier_group,
             self.weight_bracket_ltl(route),
         )
         return _tariff_bundle(route, common)
@@ -72,7 +84,12 @@ class TruckBasedCosting:
             route.vehicle.id,
             get_deviation_bin(route.demand.deviation)[0],
         )
-        return _tariff_bundle(route, common)
+        bundle = _tariff_bundle(route, common)
+
+        if route.__class__.__name__ == "LinehaulRoute" and route.demand.hub.linehaul_transport_concept == "FTL":
+            return [item for item in bundle if item[0] == "cofor"]
+
+        return bundle
 
     @staticmethod
     def route_cost(route: Route) -> float:

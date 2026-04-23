@@ -1,4 +1,5 @@
 import copy
+import math
 from dataclasses import dataclass, field
 from typing import Iterable, Callable, TypeVar
 
@@ -405,14 +406,23 @@ class Scenario:
     def global_total_kpis(self):
         return self.direct_all_kpis + self.hub_all_kpis
 
+    @staticmethod
+    def _json_number(value):
+        if value is None:
+            return None
+        value = float(value)
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return value
+
     # Other properties
     @property
     def summary(self):
         return {
             "name": self.name,
-            "total_cost": self.global_total_kpis.total_cost,
-            "trucks": self.global_total_kpis.trucks,
-            "utilization": self.global_total_kpis.utilization,
+            "total_cost": self._json_number(self.global_total_kpis.total_cost),
+            "trucks": self._json_number(self.global_total_kpis.trucks),
+            "utilization": self._json_number(self.global_total_kpis.utilization),
         }
 
     def export_trips_debug(self):

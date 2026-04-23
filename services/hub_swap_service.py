@@ -58,7 +58,7 @@ class HubSwapService:
         for shipper in direct_to_move:
             assigned_hub = self._assign_hub_to_shipper(shipper)
             if not assigned_hub:
-                shippers_without_hub.append(shipper)
+                shippers_without_hub.append(shipper.short_summary)
                 continue
 
             self.move_direct_shipper_to_hub(project, shipper, assigned_hub)

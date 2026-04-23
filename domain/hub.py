@@ -1,5 +1,8 @@
+import math
+from decimal import Decimal
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 from domain.general_algorithms import decimal_to_dms_str
@@ -8,6 +11,91 @@ from domain.kpi_set import KPISet
 from domain.routes.first_leg_route import FirstLegRoute
 from domain.routes.linehaul_route import LinehaulRoute
 from domain.shipper import Shipper
+
+def _jsonable_scalar(value):
+    if value is None:
+        return None
+
+    if isinstance(value, (str, bool, int)):
+        return value
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, Decimal):
+        f = float(value)
+        return f if math.isfinite(f) else None
+
+    if np is not None and isinstance(value, np.generic):
+        return _jsonable_scalar(value.item())
+
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+
+    return str(value)
+
+
+def _jsonable_coordinates(coords):
+    if coords is None:
+        return None
+
+    if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+        return [_jsonable_scalar(coords[0]), _jsonable_scalar(coords[1])]
+
+    if np is not None and isinstance(coords, np.ndarray):
+        arr = coords.tolist()
+        if isinstance(arr, list) and len(arr) >= 2:
+            return [_jsonable_scalar(arr[0]), _jsonable_scalar(arr[1])]
+
+    if isinstance(coords, dict):
+        lat = coords.get("lat", coords.get("latitude"))
+        lon = coords.get("lon", coords.get("longitude"))
+        if lat is not None or lon is not None:
+            return [_jsonable_scalar(lat), _jsonable_scalar(lon)]
+
+    if hasattr(coords, "lat") or hasattr(coords, "latitude"):
+        lat = getattr(coords, "lat", getattr(coords, "latitude", None))
+        lon = getattr(coords, "lon", getattr(coords, "longitude", None))
+        return [_jsonable_scalar(lat), _jsonable_scalar(lon)]
+
+    return str(coords)
+
+
+def _empty_flow_summary(error=None):
+    return {
+        "first_leg_cost": None,
+        "linehaul_frequency": None,
+        "linehaul_cost": None,
+        "linehaul_weight": None,
+        "linehaul_volume": None,
+        "linehaul_loading_meters": None,
+        "linehaul_weight_utilization": None,
+        "linehaul_volume_utilization": None,
+        "linehaul_loading_meters_utilization": None,
+        "_error": error,
+    }
+
+
+def _build_flow_summary(route, first_leg_cost):
+    try:
+        return {
+            "first_leg_cost": _jsonable_scalar(first_leg_cost),
+            "linehaul_frequency": _jsonable_scalar(route.frequency),
+            "linehaul_cost": _jsonable_scalar(route.total_cost),
+            "linehaul_weight": _jsonable_scalar(route.weight),
+            "linehaul_volume": _jsonable_scalar(route.volume),
+            "linehaul_loading_meters": _jsonable_scalar(route.loading_meters),
+            "linehaul_weight_utilization": _jsonable_scalar(route.weight_utilization),
+            "linehaul_volume_utilization": _jsonable_scalar(route.volume_utilization),
+            "linehaul_loading_meters_utilization": _jsonable_scalar(route.loading_meters_utilization),
+            "_error": None,
+        }
+    except Exception as e:
+        return _empty_flow_summary(str(e))
+
 
 
 class Hub:
@@ -90,26 +178,28 @@ class Hub:
     def zip_key(self, digits):
         return self.country + self.zip_code[:digits]
 
-    def summary(self, flow_direction):
-        if flow_direction == "parts":
-            linehaul_route = self.parts_linehaul_route
-            pre_carriage_costs = self.parts_pre_carriage_costs
+    @property
+    def summary(self):
+        parts = _build_flow_summary(self.parts_linehaul_route, self.parts_pre_carriage_costs)
+
+        if self.has_empties_flow:
+            empties = _build_flow_summary(self.empties_linehaul_route, self.empties_pre_carriage_costs)
         else:
-            linehaul_route = self.empties_linehaul_route
-            pre_carriage_costs = self.empties_pre_carriage_costs
+            empties = _empty_flow_summary("No empties flow")
+
+        try:
+            carrier = getattr(getattr(self.parts_linehaul_route, "linehaul_carrier", None), "group", None)
+            carrier = _jsonable_scalar(carrier)
+        except Exception as e:
+            carrier = f"[ERROR: {e}]"
+
         return {
-            "name": self.name,
-            "cofor": self.cofor,
-            "first_leg_cost": pre_carriage_costs,
-            "linehaul_frequency": linehaul_route.frequency,
-            "linehaul_cost": linehaul_route.total_cost,
-            "linehaul_weight": linehaul_route.weight,
-            "linehaul_volume": linehaul_route.volume,
-            "linehaul_loading_meters": linehaul_route.loading_meters,
-            "linehaul_weight_utilization": linehaul_route.weight_utilization,
-            "linehaul_volume_utilization": linehaul_route.volume_utilization,
-            "linehaul_loading_meters_utilization": linehaul_route.loading_meters_utilization,
-            "coordinates": self.coordinates,
+            "name": _jsonable_scalar(self.name),
+            "cofor": _jsonable_scalar(self.cofor),
+            "coordinates": _jsonable_coordinates(self.coordinates),
+            "carrier": carrier,
+            "parts": parts,
+            "empties": empties,
         }
 
     @property

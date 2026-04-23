@@ -49,6 +49,9 @@ class TariffService:
     def assign_ltl_linehaul(self, route: LinehaulRoute) -> None:
         self.assign_route(route, self.ltl_tariffs)
 
+    def assign_hub_linehaul(self, route: LinehaulRoute) -> None:
+        self.assign_route(route, self.hub_tariffs)
+
     # =========================
     # Lookup helper
     # =========================
@@ -62,3 +65,4 @@ class TariffService:
                 source = "Zip Key" if key_type == "zip" else "COFOR"
                 return tariffs_base[key], source
         return None, "Missing"
+

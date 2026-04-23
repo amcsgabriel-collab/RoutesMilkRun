@@ -139,17 +139,20 @@ class ProjectManager:
 
     # ________________________________________________________________
     # SOLVER
-    def solve_scenario(self):
+    def solve_scenario(self, progress_tracker: LogFn):
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
 
-        solver = Solver(self.project)
+        solver = Solver(self.project, progress_tracker)
         self.current_scenario.draft_trips = solver.run()
 
     # ________________________________________________________________
     # MAP
-    def get_map_html(self):
-        return generate_scenario_map_html(self.current_scenario)
+    def get_map_html(self, ui_state: dict):
+        return generate_scenario_map_html(
+            scenario=self.current_scenario,
+            baseline_scenario=self.current_region.scenarios['AS-IS'],
+            ui_state=ui_state)
 
     # ________________________________________________________________
     # KPIs & GRAF Export

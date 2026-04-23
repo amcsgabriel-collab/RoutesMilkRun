@@ -3,6 +3,7 @@ from abc import abstractmethod, ABCMeta
 from math import ceil
 
 from domain.data_structures import Vehicle, Carrier
+from domain.domain_algorithms import get_deviation_bin
 
 
 def _safe_div(numerator, denominator):
@@ -124,6 +125,10 @@ class Route(metaclass=ABCMeta):
     @property
     def total_cost(self):
         return self.route_cost * self.frequency
+
+    @property
+    def deviation_bin(self):
+        return get_deviation_bin(self.demand.deviation)[0]
 
     @abstractmethod
     def export_dataframe(self, *args, **kwargs):

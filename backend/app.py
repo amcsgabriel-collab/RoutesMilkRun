@@ -297,14 +297,16 @@ def api_regions():
 @json_endpoint
 @with_pm_lock
 def api_region_select(data):
-    pm.project.set_current_region(data.get("region"))
+    region = data.get("region")
+    if region != pm.project.meta.current_region:
+        pm.project.set_current_region(region)
     return success()
 
 
 @app.get("/api/scenarios")
 def api_scenarios():
-    scenario_summaries = [scenario.summary for scenario in pm.current_region.scenarios.values()]
-    return success(scenario_summaries)
+    result = [scenario.summary for scenario in pm.project.current_region.scenarios.values()]
+    return success(result)
 
 
 @app.put("/api/scenario")
@@ -320,7 +322,6 @@ def api_scenario_select(data):
 def api_scenario_add():
     pm.add_scenario()
     return success(code=201)
-
 
 @app.post("/api/scenario/duplicate")
 @json_endpoint
@@ -400,9 +401,11 @@ def api_vehicles_delete(data):
 # ----------------------------------------------------
 # Map HTML
 
-@app.get("/api/map")
-def api_map():
-    html = pm.get_map_html()
+@app.post("/api/map")
+@json_endpoint
+def api_map(data):
+    ui_state = data.get("ui_state")
+    html = pm.get_map_html(ui_state)
     return success(html)
 
 
@@ -412,8 +415,8 @@ def api_map():
 @app.post("/api/solve_model")
 @with_pm_lock
 def api_solve_model():
-    pm.solve_scenario()
-    return success()
+    task_id = start_background_task(pm.solve_scenario)
+    return success(task_id)
 
 
 # ----------------------------------------------------
@@ -448,7 +451,7 @@ def api_swap_hub(data):
 @app.get("/api/swap_hub/available_hubs")
 def api_swap_available_hubs():
     hubs = pm.current_scenario.get_in_use_hubs()
-    hubs_summary = [hub.short_summary for hub in hubs]
+    hubs_summary = [hub.identity for hub in hubs]
     return success(hubs_summary)
 
 @app.post("/api/swap_hub/resolve")

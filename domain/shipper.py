@@ -93,6 +93,13 @@ class Shipper:
         return True
 
     @property
+    def short_summary(self):
+        return {
+            "cofor": self.cofor,
+            "zip_key": self.zip_key(2),
+        }
+
+    @property
     def summary(self):
         return {
             "name": self.name,

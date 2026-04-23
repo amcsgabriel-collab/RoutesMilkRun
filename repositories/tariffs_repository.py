@@ -1,6 +1,6 @@
 import pandas as pd
 
-from domain.tariff import FtlTariff, LtlTariff
+from domain.tariff import FtlTariff, LtlTariff, HubTariff
 
 
 def ftl_tariffs_from_dataframe(tariffs_dataframe: pd.DataFrame) -> dict[tuple[str, str, str, str], FtlTariff]:
@@ -28,6 +28,21 @@ def ltl_tariffs_from_dataframe(tariffs_dataframe: pd.DataFrame) -> dict[tuple[st
             row['Origin Code'],
             row['Destination Code'],
         ): LtlTariff(
+            cost_per_100kg=row['Cost per 100kg'],
+            min_price=row['Min Price'],
+            max_price=row['Max Price']
+        )
+        for _, row in tariffs_dataframe.iterrows()
+    }
+
+def hub_tariffs_from_dataframe(tariffs_dataframe: pd.DataFrame) -> dict[tuple[str, str, str, str], HubTariff]:
+    return {
+        (
+            row['Carrier Short Name'],
+            row['Chargeable Weight Bracket'],
+            row['Origin Code'],
+            row['Destination Code'],
+        ): HubTariff(
             cost_per_100kg=row['Cost per 100kg'],
             min_price=row['Min Price'],
             max_price=row['Max Price']

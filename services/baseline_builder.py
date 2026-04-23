@@ -34,7 +34,7 @@ from repositories.route_pattern_repository import RoutePatternRepository
 from repositories.shipper_repository import ShipperRepository
 from repositories.tariffs_repository import (
     ftl_tariffs_from_dataframe,
-    ltl_tariffs_from_dataframe,
+    ltl_tariffs_from_dataframe, hub_tariffs_from_dataframe,
 )
 from repositories.trip_repository import TripRepository
 from repositories.vehicle_repository import VehicleRepository
@@ -43,7 +43,7 @@ from services.tariff_service import TariffService
 LogFn = Callable[[str], None]
 
 BASELINE_SCENARIO = "AS-IS"
-ALL_REGIONS = "ALL_REGIONS"
+ALL_REGIONS = "ALL REGIONS"
 
 
 def verify_coordinates(shippers: dict[str, Shipper]):
@@ -142,9 +142,9 @@ def validate_linehaul_missing_tariffs(route: LinehaulRoute) -> None:
         {
             "zip_key": route.demand.starting_point.zip_key(2),
             "cofor": route.demand.starting_point.cofor,
-            "carrier": route.demand.carrier.group,
+            "carrier": route.carrier.group,
             "vehicle": route.vehicle.id,
-            "deviation_bucket": route.demand.deviation_bin,
+            "deviation_bucket": route.deviation_bin,
         }
     ] if route.tariff_source == "Missing" else []
     if missing:
@@ -164,6 +164,7 @@ class BaselineBuilder:
         self.ftl_tariffs_database = None
         self.hubs_list = []
         self.ltl_tariffs_database = None
+        self.hub_tariffs_database = None
         self.carrier_helper = None
         self.plant_name_helper = None
         self.vehicles_database = None
@@ -200,6 +201,9 @@ class BaselineBuilder:
 
         self._log("Creating global trips...")
         global_trips = self._create_trips_global()
+
+        self._log("Retaining only vehicles used by existing routes...")
+        self._retain_only_used_vehicles(global_trips)
 
         self._log("Creating global baseline scenario...")
         global_baseline = Scenario(
@@ -285,10 +289,14 @@ class BaselineBuilder:
         self.ltl_tariffs_database = transformer.get_transformed_tariffs("ltl")
         ltl_tariffs_by_key = ltl_tariffs_from_dataframe(self.ltl_tariffs_database)
 
+        self.hub_tariffs_database = transformer.get_transformed_tariffs("hub")
+        self.hub_tariffs_database.to_csv('hub_debug.csv')
+        hub_tariffs_by_key = hub_tariffs_from_dataframe(self.hub_tariffs_database)
+
         self.tariffs_service = TariffService(
             ftl_mr_tariffs=ftl_tariffs_by_key,
             ltl_tariffs=ltl_tariffs_by_key,
-            hub_tariffs=None,
+            hub_tariffs=hub_tariffs_by_key,
         )
 
     def _create_hubs_global(self) -> set[Hub]:
@@ -319,27 +327,70 @@ class BaselineBuilder:
         self._assign_hub_tariffs(hubs)
         return hubs
 
+    def _assign_with_hub_fallback(self, route) -> None:
+        """
+        Try normal tariff assignment first.
+        If still missing, try HUB tariffs.
+        Then validate.
+        """
+        if isinstance(route, set):
+            if not route:
+                return
+
+            self.tariffs_service.assign_ltl_routes(route)
+
+            missing_routes = {r for r in route if r.tariff_source == "Missing"}
+            if missing_routes:
+                self.tariffs_service.assign_hub_routes(missing_routes)
+
+            validate_ltl_missing_tariffs(route)
+            return
+
+        if isinstance(route, LinehaulRoute):
+            if route.demand.hub.linehaul_transport_concept in {"FTL", "MR"}:
+                self.tariffs_service.assign_linehaul(route)
+            else:
+                self.tariffs_service.assign_hub_linehaul(route)
+
+            validate_linehaul_missing_tariffs(route)
+            return
+
+        raise TypeError(f"Unsupported route type for hub fallback: {type(route)}")
+
+    # def _assign_hub_tariffs(self, hubs: set[Hub]) -> None:
+    #     for hub in hubs:
+    #         self._assign_with_hub_fallback(hub.parts_first_leg_routes)
+    #
+    #         if hub.has_empties_flow:
+    #             self._assign_with_hub_fallback(hub.empties_first_leg_routes)
+    #
+    #         self._assign_with_hub_fallback(hub.parts_linehaul_route)
+    #
+    #         if hub.has_empties_flow:
+    #             self._assign_with_hub_fallback(hub.empties_linehaul_route)
+
     def _assign_hub_tariffs(self, hubs: set[Hub]) -> None:
         for hub in hubs:
-            self.tariffs_service.assign_ltl_routes(hub.parts_first_leg_routes)
-            validate_ltl_missing_tariffs(hub.parts_first_leg_routes)
+            is_target = hub.cofor == "A00GUP  02"
+
+            self._assign_with_hub_fallback(hub.parts_first_leg_routes)
+            if hub.has_empties_flow:
+                self._assign_with_hub_fallback(hub.empties_first_leg_routes)
+
+            if is_target:
+                print(hub.parts_linehaul_route.tariff_key_bundle)
+                print(hub.empties_linehaul_route.tariff_key_bundle)
+
+            self._assign_with_hub_fallback(hub.parts_linehaul_route)
+            if is_target:
+                r = hub.parts_linehaul_route
+                print(f"[DEBUG] {hub.cofor} parts_linehaul_route:", r.tariff, r.tariff_source)
 
             if hub.has_empties_flow:
-                self.tariffs_service.assign_ltl_routes(hub.empties_first_leg_routes)
-                validate_ltl_missing_tariffs(hub.empties_first_leg_routes)
-
-            if hub.linehaul_transport_concept in {"FTL", "MR"}:
-                self.tariffs_service.assign_linehaul(hub.parts_linehaul_route)
-                if hub.has_empties_flow:
-                    self.tariffs_service.assign_linehaul(hub.empties_linehaul_route)
-            else:
-                self.tariffs_service.assign_ltl_linehaul(hub.parts_linehaul_route)
-                if hub.has_empties_flow:
-                    self.tariffs_service.assign_ltl_linehaul(hub.empties_linehaul_route)
-
-            validate_linehaul_missing_tariffs(hub.parts_linehaul_route)
-            if hub.has_empties_flow:
-                validate_linehaul_missing_tariffs(hub.empties_linehaul_route)
+                self._assign_with_hub_fallback(hub.empties_linehaul_route)
+                if is_target:
+                    r = hub.empties_linehaul_route
+                    print(f"[DEBUG] {hub.cofor} empties_linehaul_route:", r.tariff, r.tariff_source)
 
     def _create_trips_global(self) -> set[Trip]:
         """
@@ -508,3 +559,19 @@ class BaselineBuilder:
             )
 
         return regions
+
+    def _retain_only_used_vehicles(self, trips: set[Trip]) -> None:
+        used_vehicle_ids = {
+            route.vehicle.id
+            for trip in trips
+            for route in (trip.parts_route, trip.empties_route)
+            if route is not None
+        }
+
+        self.vehicles = {
+            vehicle_id: vehicle
+            for vehicle_id, vehicle in self.vehicles.items()
+            if vehicle_id in used_vehicle_ids
+        }
+
+        self._log(f"Retained {len(self.vehicles)} vehicles used by existing routes")

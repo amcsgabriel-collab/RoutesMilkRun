@@ -333,7 +333,7 @@ async function confirmSwap() {
           const html = await loadHtml("../views_html/swap_resolve_missing.html");
           openModal(html);
           const availableHubs = await apiGet("/api/swap_hub/available_hubs");
-          const manualSwapFlow = new ManualSwapFlow(suppliers, availableHubs);
+          const manualSwapFlow = new ManualSwapFlow(suppliers_wo_hubs, availableHubs);
           manualSwapFlow.init();
           await manualSwapFlow.run();
           alert("Swap resolved successfully.");

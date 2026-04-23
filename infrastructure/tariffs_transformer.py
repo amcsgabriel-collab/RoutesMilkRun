@@ -89,8 +89,8 @@ class TariffsTransformer:
         tariffs = self._split_tariffs_key(tariffs)
         if tariffs_type == 'ftl':
             return self._melt_tariffs_deviation_bucket(tariffs)
-
-        return self._melt_tariffs_chargeable_weight(tariffs, tariffs_type)
+        tariffs = self._melt_tariffs_chargeable_weight(tariffs, tariffs_type)
+        return self._filter_empty_cost_rows(tariffs)
 
     @staticmethod
     def _filter_itms_mode(tariffs: pd.DataFrame, tariffs_type: str) -> pd.DataFrame:
@@ -189,3 +189,7 @@ class TariffsTransformer:
             var_name='Chargeable Weight Bracket',
             value_name='Cost per 100kg'
         )
+
+    @staticmethod
+    def _filter_empty_cost_rows(tariffs: pd.DataFrame) -> pd.DataFrame:
+        return tariffs[tariffs['Cost per 100kg'] > 0]

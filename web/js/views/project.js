@@ -10,9 +10,18 @@ import { openSwapModal } from '../ui/swap_hub_direct.js';
 import { setAppBusy } from "../ui/overlay.js";
 import { openLockRoutesModal, openBlockRoutesModal } from "../ui/lock_block_routes_modal.js";
 import { loadScenarioKpis } from "../ui/kpis_page_rendering.js"
+import { openSolveLogbox } from "../ui/solver_logbox.js";
 
 
-let state = { scenarios: [], selectedIndex: -1 };
+let state = {
+  scenarios: [],
+  selectedIndex: -1,
+  mapUiState: {
+    flow: "parts",
+    show_baseline: false,
+    active_networks: ["Direct", "Hubs"],
+  },
+};
 
 export async function showProjectPage() {
   const html = await loadHtml("/views_html/project.html");
@@ -23,6 +32,7 @@ export async function showProjectPage() {
 async function initializeProjectPage() {
 
   // Wiring up all project page action buttons.
+  document.getElementById("region-select").addEventListener("change", onRegionChange);
   // Scenario actions
   document.getElementById("sc-add").addEventListener("click", handleAddScenario);
   document.getElementById("sc-duplicate").addEventListener("click", handleDuplicateScenario);
@@ -43,6 +53,20 @@ async function initializeProjectPage() {
   document.getElementById('right-panel-toggle').addEventListener('click', ToggleCollapseRightPanel)
   // Wire the toggling of the Map/KPIs panels
   wireToggleMap()
+  // Wire map event-changing observer
+  window.addEventListener("message", (event) => {
+  if (event.data?.type !== "scenario-map-state-changed") return;
+
+  const mapState = event.data.payload;
+  state.mapUiState = {
+    flow: mapState.flow ?? "parts",
+    show_baseline: Boolean(mapState.show_baseline),
+    active_networks: Array.isArray(mapState.active_networks)
+      ? mapState.active_networks
+      : ["Direct", "Hubs"],
+      };
+    });
+
   // Load project content and refresh UI.
   await refreshProjectData()
 }
@@ -91,7 +115,7 @@ async function handleSaveScenario() {
     return;
   }
   await apiPatch("/api/scenario")
-  refreshScenarioData()
+  await refreshScenarioData()
 }
 
 
@@ -108,7 +132,7 @@ function ToggleCollapseRightPanel() {
 export async function refreshProjectData() {
   await loadProjectOverview();
   await loadRegions();
-  refreshScenarioData()
+  await refreshScenarioData()
 }
 
 // Load project metadata to fill in the overview card.
@@ -126,6 +150,15 @@ async function loadProjectOverview() {
   }
 }
 
+async function onRegionChange() {
+  const select = document.getElementById("region-select");
+  if (!select) return;
+
+  const region = select.value;
+  await apiPut("/api/region", { region });
+  await refreshProjectData();
+}
+
 // Load the data that goes into the "Sourcing Region" selector and picks current selection from the project meta.
 async function loadRegions() {
   const select = document.getElementById("region-select");
@@ -140,14 +173,9 @@ async function loadRegions() {
   const project = await apiGet("/api/project");
   const currentRegion = project.meta.current_region;
   if (currentRegion) select.value = currentRegion;
-
-  // When user changes region.
-  select.addEventListener("change", async () => {
-    const region = select.value;
-    await apiPut("/api/region", { region });
-    refreshProjectData()
-  });
 }
+
+
 
 async function refreshScenarioData() {
   await loadScenarios();
@@ -239,18 +267,18 @@ function renderScenarioSummary() {
   const s = state.scenarios[state.selectedIndex];
   if (!s) { out.textContent = "No scenario selected"; return; }
 
-  const costStr = (s.direct_total_cost != null)
+  const costStr = (s.total_cost != null)
     ? Number(s.direct_total_cost).toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })
     : "—";
 
-  const freqStr = (s.direct_trucks != null)
+  const freqStr = (s.trucks != null)
     ? Number(s.direct_trucks).toLocaleString(undefined, { maximumFractionDigits: 2 })
     : "—";
 
-  const utilStr = (s.direct_utilization != null)
+  const utilStr = (s.utilization != null)
     ? (Number(s.direct_utilization) * (Number(s.direct_utilization) <= 1 ? 100 : 1))
       .toLocaleString(undefined, { maximumFractionDigits: 1 }) + "%"
     : "—";
@@ -291,8 +319,11 @@ export async function showMap() {
   const container = document.getElementById("map-placeholder");
   container.innerHTML = '<iframe id="map-iframe" style="width:100%;height:100%;border:0"></iframe>';
   const iframe = document.getElementById("map-iframe");
+
   try {
-    const html = await apiGet("/api/map");
+    const html = await apiPost("/api/map", {
+      ui_state: state.mapUiState
+    });
     iframe.srcdoc = html;
   } catch (e) {
     container.textContent = "Map load failed";
@@ -304,13 +335,12 @@ async function runSolver() {
   if (!confirm("Run the solver for current scenario?")) {
     return;
   }
-  setAppBusy(true)
-  const res = await apiPost("/api/solve_model")
-  if (res && res.non_optimal) {
-    alert("Model did not solve to optimality. Check parameters.")
-  }
-  refreshScenarioData()
-  setAppBusy(false)
+  try {
+  await openSolveLogbox();
+  await refreshScenarioData();
+} catch (e) {
+  alert(e.message || "Unexpected error during solving.");
+}
 }
 
 async function exportSolution() {
