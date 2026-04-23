@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "4flow-rob"
+name = "rob_4flow"
 version = "0.1.0"
 description = "Your package description"
 readme = "README.md"
@@ -24,4 +24,7 @@ dependencies = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-rob_4flow = ["helper_files/**/*"]
+rob_4flow = [
+    "helper_files/**/*",
+    "web/**/*"
+]

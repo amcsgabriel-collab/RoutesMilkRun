@@ -1,4 +1,4 @@
-from importlib.metadata import files
+import importlib.resources as resources
 from pathlib import Path
 import sys
 
@@ -11,7 +11,8 @@ def get_local_path(*parts):
     return PROJECT_DIR.joinpath(*parts)
 
 def get_helper_path(*parts):
-    return files("rob_4flow").joinpath("helper_files", *parts)
+    resource = resources.files("rob_4flow").joinpath("helper_files", *parts)
+    return Path(resources.as_file(resource).__enter__())
 
 def get_maps_path(*parts):
     maps_dir = PROJECT_DIR / 'exported_maps'

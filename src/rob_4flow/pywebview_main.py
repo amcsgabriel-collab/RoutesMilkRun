@@ -4,17 +4,15 @@ import time
 import sys
 import socket
 from pathlib import Path
+import importlib.resources as resources
 
 import webview
 
-# CONFIG
 FLASK_HOST = "127.0.0.1"
 FLASK_PORT = 5000
 FLASK_PATH = "/index.html"
 FLASK_URL = f"http://{FLASK_HOST}:{FLASK_PORT}{FLASK_PATH}"
-HERE = Path(__file__).resolve().parent
-ICON = HERE / "web" / "icon.png"
-REPO_ROOT = HERE
+ICON = str(resources.files("rob_4flow").joinpath("web", "4flow_seal_icon.ico"))
 SERVER_START_TIMEOUT = 15.0
 
 
@@ -105,16 +103,8 @@ def http_get_status(path="/", timeout=3.0):
 
 
 def start_flask_import():
-    try:
-        sys.path.insert(0, str(REPO_ROOT))
-        import importlib
-        module = importlib.import_module("backend.app")
-        flask_app = getattr(module, "app", None)
-        if not flask_app:
-            raise RuntimeError("Could not find Flask 'app' in backend.app or backend/app.py")
-    except Exception as e:
-        raise RuntimeError(f"Import start failed: {e}")
-
+    from .backend.app import create_app
+    flask_app = create_app()
     def _run():
         flask_app.run(host=FLASK_HOST, port=FLASK_PORT, threaded=True, use_reloader=False)
 
@@ -137,7 +127,7 @@ def wait_for_http_200(path=FLASK_PATH, timeout=SERVER_START_TIMEOUT):
         time.sleep(0.25)
 
 def main():
-    print("Launcher starting. repo_root:", REPO_ROOT)
+    print("Launcher starting")
     proc = None
 
     # Start Flask (try import first)
