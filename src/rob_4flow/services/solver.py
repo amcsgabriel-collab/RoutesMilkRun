@@ -18,8 +18,9 @@ and participate in final trip assembly, including roundtrip pairing where possib
 Shippers already covered by locked routes are excluded from optimization.
 User-blocked route patterns are also excluded from candidate generation.
 """
-
+import csv
 from collections import defaultdict
+from pathlib import Path
 
 import pulp
 
@@ -332,10 +333,39 @@ class MilkRunSolver:
             f"Built {len(self.feasible_pair_allocations)} feasible roundtrip pair allocations"
         )
 
+        self.rebuild_route_group_indexes()
+        self.run_conservative_lp_route_pruning()
+        self.progress_tracker(
+            f"Retained {len(self.parts_routes)} parts routes and "
+            f"{len(self.empties_routes)} empties routes after conservative LP pruning"
+        )
+
+        self.run_conservative_lp_pair_pruning()
+        self.progress_tracker(
+            f"Retained {len(self.feasible_pair_allocations)} feasible roundtrip pair allocations "
+            f"after conservative LP pair pruning"
+        )
+
+
         self.progress_tracker("Building optimization Model")
         self.build_model()
+        stats = self.get_model_stats()
         self.progress_tracker(
-            f"Optimization model ready with {len(self.model.constraints)} constraints"
+            "\n".join([
+                "Optimization model ready:",
+                f"  Constraints: {stats['constraints']}",
+                f"  Variables: {stats['variables']['binary']} binary, {stats['variables']['continuous']} continuous",
+                f"  Routes: parts={stats['routes']['parts']}, empties={stats['routes']['empties']}",
+                f"  Fixed: parts={stats['routes']['fixed_parts']}, empties={stats['routes']['fixed_empties']}",
+                f"  Pair vars: {stats['variables']['pair_vars']}",
+                f"  Parts routes/shipper: avg={stats['structure']['avg_parts_routes_per_shipper']:.2f}, max={stats['structure']['max_parts_routes_per_shipper']}",
+                f"  Empties routes/shipper: avg={stats['structure']['avg_empties_routes_per_shipper']:.2f}, max={stats['structure']['max_empties_routes_per_shipper']}",
+                f"  Pairs per parts route: avg={stats['structure']['avg_pairs_per_parts_route']:.2f}, max={stats['structure']['max_pairs_per_parts_route']}",
+                f"  Pairs per empties route: avg={stats['structure']['avg_pairs_per_empties_route']:.2f}, max={stats['structure']['max_pairs_per_empties_route']}",
+                f"  Cost range: {stats['ranges']['objective_cost']}",
+                f"  Pair saving range: {stats['ranges']['pair_saving']}",
+                f"  Frequency range: {stats['ranges']['route_frequency']}",
+            ])
         )
 
     def solve(self):
@@ -457,8 +487,15 @@ class MilkRunSolver:
         self.empties_routes_by_group = self._group_routes(self.empties_routes)
 
     def remove_dominated_routes(self):
-        self.parts_routes = self._remove_dominated_route_set(self.parts_routes)
-        self.empties_routes = self._remove_dominated_route_set(self.empties_routes)
+        self.parts_routes = self._filter_routes_by_zip_dominant_vehicle(self.parts_routes)
+        self.empties_routes = self._filter_routes_by_zip_dominant_vehicle(
+            self.empties_routes
+        )
+
+        self.parts_routes = self._filter_routes_by_pattern_frequency(self.parts_routes)
+        self.empties_routes = self._filter_routes_by_pattern_frequency(
+            self.empties_routes
+        )
 
         filtered_cache_keys = (
             self.parts_routes
@@ -488,32 +525,90 @@ class MilkRunSolver:
             if route in filtered_cache_keys
         }
 
-    def _remove_dominated_route_set(
+    def _filter_routes_by_zip_dominant_vehicle(
         self, routes: set[DirectRoute]
     ) -> set[DirectRoute]:
-        routes_by_signature: dict[tuple, list[DirectRoute]] = defaultdict(list)
+        routes_by_zip: dict[str, list[DirectRoute]] = defaultdict(list)
+        kept_routes = set()
+
+        for route in routes:
+            routes_by_zip[route.starting_point.zip_code].append(route)
+
+        for zip_code, zip_routes in routes_by_zip.items():
+            best_parts_vehicle = self._pick_best_vehicle_for_zip(
+                [r for r in zip_routes if r.demand.flow_direction == "parts"],
+                cost_getter=lambda r: r.tariff.base_cost,
+            )
+            best_empties_vehicle = self._pick_best_vehicle_for_zip(
+                [r for r in zip_routes if r.demand.flow_direction == "empties"],
+                cost_getter=lambda r: r.tariff.base_cost,
+            )
+            best_roundtrip_vehicle = self._pick_best_vehicle_for_zip(
+                zip_routes,
+                cost_getter=lambda r: r.tariff.roundtrip_base_cost,
+            )
+
+            allowed_vehicle_ids = {
+                vehicle_id
+                for vehicle_id in (
+                    best_parts_vehicle,
+                    best_empties_vehicle,
+                    best_roundtrip_vehicle,
+                )
+                if vehicle_id is not None
+            }
+
+            if not allowed_vehicle_ids:
+                kept_routes.update(zip_routes)
+                continue
+
+            kept_routes.update(
+                route for route in zip_routes if route.vehicle.id in allowed_vehicle_ids
+            )
+
+        return kept_routes
+
+    @staticmethod
+    def _pick_best_vehicle_for_zip(
+        routes: list[DirectRoute],
+        cost_getter,
+    ) -> str | None:
+        if not routes:
+            return None
+
+        best_by_vehicle: dict[str, tuple[float, str]] = {}
+
+        for route in routes:
+            vehicle_id = route.vehicle.id
+            candidate = (cost_getter(route), vehicle_id)
+
+            current_best = best_by_vehicle.get(vehicle_id)
+            if current_best is None or candidate < current_best:
+                best_by_vehicle[vehicle_id] = candidate
+
+        return min(best_by_vehicle.values())[1]
+
+    def _filter_routes_by_pattern_frequency(
+        self, routes: set[DirectRoute]
+    ) -> set[DirectRoute]:
+        routes_by_pattern: dict[tuple, list[DirectRoute]] = defaultdict(list)
         kept_routes = set()
 
         for route in routes:
             signature = (
-                frozenset(route.demand.pattern.shippers),
-                route.vehicle.id,
+                route.demand.pattern,
                 route.starting_point.zip_code,
                 route.demand.flow_direction,
             )
-            routes_by_signature[signature].append(route)
+            routes_by_pattern[signature].append(route)
 
-        for same_signature_routes in routes_by_signature.values():
-            best_route = min(
-                same_signature_routes,
-                key=lambda r: (
-                    self.route_total_cost[r],
-                    self.route_roundtrip_total_cost[r],
-                    self.route_frequency[r],
-                    hash(r),
-                ),
+        for same_pattern_routes in routes_by_pattern.values():
+            min_frequency = min(self.route_frequency[route] for route in same_pattern_routes)
+            kept_routes.update(
+                route
+                for route in same_pattern_routes
+                if self.route_frequency[route] == min_frequency
             )
-            kept_routes.add(best_route)
 
         return kept_routes
 
@@ -604,6 +699,96 @@ class MilkRunSolver:
                     selected_count += 1
                     if selected_count >= max_partners:
                         break
+
+    def get_model_stats(self):
+        parts_routes_per_shipper = [
+            sum(1 for r in self.parts_routes if shipper in r.demand.pattern.shippers)
+            for shipper in self.parts_shippers
+        ]
+
+        empties_routes_per_shipper = [
+            sum(1 for r in self.empties_routes if shipper in r.demand.pattern.shippers)
+            for shipper in self.empties_shippers
+        ]
+
+        avg_parts_routes_per_shipper = (
+            sum(parts_routes_per_shipper) / len(parts_routes_per_shipper)
+            if parts_routes_per_shipper else 0
+        )
+        max_parts_routes_per_shipper = max(parts_routes_per_shipper, default=0)
+
+        avg_empties_routes_per_shipper = (
+            sum(empties_routes_per_shipper) / len(empties_routes_per_shipper)
+            if empties_routes_per_shipper else 0
+        )
+        max_empties_routes_per_shipper = max(empties_routes_per_shipper, default=0)
+
+        # --- pairs per route ---
+        pairs_per_parts_route = [
+            len(self.pairs_by_parts_route.get(route, []))
+            for route in self.parts_routes
+        ]
+
+        pairs_per_empties_route = [
+            len(self.pairs_by_empties_route.get(route, []))
+            for route in self.empties_routes
+        ]
+
+        avg_pairs_per_parts_route = (
+            sum(pairs_per_parts_route) / len(pairs_per_parts_route)
+            if pairs_per_parts_route else 0
+        )
+        max_pairs_per_parts_route = max(pairs_per_parts_route, default=0)
+
+        avg_pairs_per_empties_route = (
+            sum(pairs_per_empties_route) / len(pairs_per_empties_route)
+            if pairs_per_empties_route else 0
+        )
+        max_pairs_per_empties_route = max(pairs_per_empties_route, default=0)
+
+        # --- ranges ---
+        all_costs = list(self.route_total_cost.values())
+        min_cost = min(all_costs, default=0)
+        max_cost = max(all_costs, default=0)
+
+        all_savings = list(self.pair_saving_per_frequency.values())
+        min_saving = min(all_savings, default=0)
+        max_saving = max(all_savings, default=0)
+
+        all_freqs = list(self.route_frequency.values())
+        min_freq = min(all_freqs, default=0)
+        max_freq = max(all_freqs, default=0)
+
+        return {
+            "routes": {
+                "parts": len(self.parts_routes),
+                "empties": len(self.empties_routes),
+                "fixed_parts": len(self.fixed_parts_routes),
+                "fixed_empties": len(self.fixed_empties_routes),
+            },
+            "variables": {
+                "binary": len(self.parts_routes) + len(self.empties_routes),
+                "continuous": len(self.feasible_pair_allocations),
+                "pair_vars": len(self.feasible_pair_allocations),
+            },
+            "structure": {
+                "avg_parts_routes_per_shipper": avg_parts_routes_per_shipper,
+                "max_parts_routes_per_shipper": max_parts_routes_per_shipper,
+                "avg_empties_routes_per_shipper": avg_empties_routes_per_shipper,
+                "max_empties_routes_per_shipper": max_empties_routes_per_shipper,
+                "avg_pairs_per_parts_route": avg_pairs_per_parts_route,
+                "max_pairs_per_parts_route": max_pairs_per_parts_route,
+                "avg_pairs_per_empties_route": avg_pairs_per_empties_route,
+                "max_pairs_per_empties_route": max_pairs_per_empties_route,
+            },
+            "ranges": {
+                "objective_cost": (min_cost, max_cost),
+                "pair_saving": (min_saving, max_saving),
+                "route_frequency": (min_freq, max_freq),
+            },
+            "constraints": len(self.model.constraints),
+        }
+
 
     def build_model(self):
         self.model = pulp.LpProblem("Atomic_Route_Allocation", pulp.LpMinimize)
@@ -727,3 +912,856 @@ class MilkRunSolver:
             for pair, var in self.pair_frequency.items()
             if round(pulp.value(var)) > 0
         }
+
+    @staticmethod
+    def _stable_pattern_key(pattern: RoutePattern) -> str:
+        return "|".join(
+            sorted(getattr(shipper, "id", str(shipper)) for shipper in pattern.shippers)
+        )
+
+    @staticmethod
+    def _stable_route_key(route: DirectRoute) -> tuple:
+        return (
+            route.demand.flow_direction,
+            route.carrier.group,
+            route.vehicle.id,
+            route.starting_point.zip_code,
+            "|".join(
+                sorted(
+                    getattr(shipper, "id", str(shipper))
+                    for shipper in route.demand.pattern.shippers
+                )
+            ),
+        )
+
+    @staticmethod
+    def _shipper_ids(route: DirectRoute) -> str:
+        return "|".join(
+            sorted(getattr(shipper, "id", str(shipper)) for shipper in route.demand.pattern.shippers)
+        )
+
+    @staticmethod
+    def _shipper_names(route: DirectRoute) -> str:
+        return "|".join(
+            sorted(getattr(shipper, "name", str(shipper)) for shipper in route.demand.pattern.shippers)
+        )
+
+    def export_lp_relaxation_csv(
+            self,
+            output_dir: str | Path,
+            *,
+            file_prefix: str = "lp_relaxation",
+            solver=None,
+    ) -> None:
+        """
+        Exports LP-relaxation diagnostics for all route and pair variables.
+
+        Output files:
+        - {file_prefix}_routes.csv
+        - {file_prefix}_pairs.csv
+        """
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        self.progress_tracker("Building LP relaxation diagnostic model")
+
+        lp_model = pulp.LpProblem("Atomic_Route_Allocation_LP_Relaxation", pulp.LpMinimize)
+
+        sorted_parts_routes = sorted(self.parts_routes, key=self._stable_route_key)
+        sorted_empties_routes = sorted(self.empties_routes, key=self._stable_route_key)
+        sorted_pairs = sorted(
+            self.feasible_pair_allocations,
+            key=lambda pair: (
+                self._stable_route_key(pair[0]),
+                self._stable_route_key(pair[1]),
+            ),
+        )
+
+        use_parts_route = pulp.LpVariable.dicts(
+            name="use_parts_route_lp",
+            indices=sorted_parts_routes,
+            lowBound=0,
+            upBound=1,
+            cat="Continuous",
+        )
+        use_empties_route = pulp.LpVariable.dicts(
+            name="use_empties_route_lp",
+            indices=sorted_empties_routes,
+            lowBound=0,
+            upBound=1,
+            cat="Continuous",
+        )
+        pair_frequency = pulp.LpVariable.dicts(
+            name="pair_frequency_lp",
+            indices=sorted_pairs,
+            lowBound=0,
+            cat="Continuous",
+        )
+
+        lp_model += (
+                pulp.lpSum(
+                    self.route_total_cost[r] * use_parts_route[r]
+                    for r in sorted_parts_routes
+                )
+                + pulp.lpSum(
+            self.route_total_cost[r] * use_empties_route[r]
+            for r in sorted_empties_routes
+        )
+                - pulp.lpSum(
+            self.pair_saving_per_frequency[pair] * pair_frequency[pair]
+            for pair in sorted_pairs
+        )
+        )
+
+        for shipper in sorted(
+                self.parts_shippers, key=lambda s: getattr(s, "id", str(s))
+        ):
+            lp_model += (
+                pulp.lpSum(
+                    use_parts_route[route]
+                    for route in sorted_parts_routes
+                    if shipper in route.demand.pattern.shippers
+                )
+                == 1,
+                f"cover_parts_{getattr(shipper, 'id', str(shipper))}",
+            )
+
+        for shipper in sorted(
+                self.empties_shippers, key=lambda s: getattr(s, "id", str(s))
+        ):
+            lp_model += (
+                pulp.lpSum(
+                    use_empties_route[route]
+                    for route in sorted_empties_routes
+                    if shipper in route.demand.pattern.shippers
+                )
+                == 1,
+                f"cover_empties_{getattr(shipper, 'id', str(shipper))}",
+            )
+
+        for parts_route in sorted_parts_routes:
+            lp_model += (
+                pulp.lpSum(
+                    pair_frequency[pair]
+                    for pair in self.pairs_by_parts_route.get(parts_route, [])
+                )
+                <= self.route_frequency[parts_route] * use_parts_route[parts_route],
+                "pair_cap_parts_lp_" + "_".join(map(str, self._stable_route_key(parts_route))),
+            )
+
+        for empties_route in sorted_empties_routes:
+            lp_model += (
+                pulp.lpSum(
+                    pair_frequency[pair]
+                    for pair in self.pairs_by_empties_route.get(empties_route, [])
+                )
+                <= self.route_frequency[empties_route] * use_empties_route[empties_route],
+                "pair_cap_empties_lp_" + "_".join(map(str, self._stable_route_key(empties_route))),
+            )
+
+        for fixed_parts_route in sorted(
+                self.fixed_parts_routes, key=self._stable_route_key
+        ):
+            lp_model += (
+                pulp.lpSum(
+                    pair_frequency[pair]
+                    for pair in self.pairs_by_parts_route.get(fixed_parts_route, [])
+                )
+                <= self.route_frequency[fixed_parts_route],
+                "pair_cap_fixed_parts_lp_" + "_".join(map(str, self._stable_route_key(fixed_parts_route))),
+            )
+
+        for fixed_empties_route in sorted(
+                self.fixed_empties_routes, key=self._stable_route_key
+        ):
+            lp_model += (
+                pulp.lpSum(
+                    pair_frequency[pair]
+                    for pair in self.pairs_by_empties_route.get(fixed_empties_route, [])
+                )
+                <= self.route_frequency[fixed_empties_route],
+                "pair_cap_fixed_empties_lp_" + "_".join(map(str, self._stable_route_key(fixed_empties_route))),
+            )
+
+        if solver is None:
+            solver = pulp.PULP_CBC_CMD(msg=True)
+
+        self.progress_tracker("Solving LP relaxation diagnostic model")
+        lp_model.solve(solver)
+        lp_status = pulp.LpStatus[lp_model.status]
+        self.progress_tracker(f"LP relaxation diagnostic solve finished with status: {lp_status}")
+
+        routes_csv_path = output_dir / f"{file_prefix}_routes.csv"
+        pairs_csv_path = output_dir / f"{file_prefix}_pairs.csv"
+
+        self._write_lp_routes_csv(
+            csv_path=routes_csv_path,
+            lp_model=lp_model,
+            use_parts_route=use_parts_route,
+            use_empties_route=use_empties_route,
+            lp_status=lp_status,
+        )
+        self._write_lp_pairs_csv(
+            csv_path=pairs_csv_path,
+            lp_model=lp_model,
+            pair_frequency=pair_frequency,
+            lp_status=lp_status,
+        )
+
+        self.progress_tracker(
+            f"LP relaxation diagnostics exported to {routes_csv_path} and {pairs_csv_path}"
+        )
+
+    def _write_lp_routes_csv(
+            self,
+            csv_path: Path,
+            lp_model,
+            use_parts_route,
+            use_empties_route,
+            lp_status: str,
+    ) -> None:
+        all_routes = sorted(
+            self.parts_routes | self.empties_routes,
+            key=self._stable_route_key,
+        )
+
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "lp_status",
+                    "lp_objective_value",
+                    "route_kind",
+                    "lp_variable_name",
+                    "lp_value",
+                    "lp_reduced_cost",
+                    "flow_direction",
+                    "carrier_group",
+                    "vehicle_id",
+                    "vehicle_name",
+                    "starting_zip_code",
+                    "group_key",
+                    "pattern_key",
+                    "shipper_ids",
+                    "shipper_names",
+                    "shipper_count",
+                    "frequency",
+                    "total_cost",
+                    "roundtrip_total_cost",
+                    "unit_cost",
+                    "roundtrip_unit_cost",
+                    "pair_delta_per_frequency",
+                    "tariff_base_cost",
+                    "tariff_roundtrip_base_cost",
+                    "in_existing_network",
+                    "is_fixed_route",
+                    "pair_options_count",
+                ],
+            )
+            writer.writeheader()
+
+            lp_objective_value = pulp.value(lp_model.objective)
+
+            for route in all_routes:
+                if route in use_parts_route:
+                    variable = use_parts_route[route]
+                    route_kind = "parts"
+                else:
+                    variable = use_empties_route[route]
+                    route_kind = "empties"
+
+                frequency = self.route_frequency[route]
+                total_cost = self.route_total_cost[route]
+                roundtrip_total_cost = self.route_roundtrip_total_cost[route]
+
+                writer.writerow(
+                    {
+                        "lp_status": lp_status,
+                        "lp_objective_value": lp_objective_value,
+                        "route_kind": route_kind,
+                        "lp_variable_name": variable.name,
+                        "lp_value": pulp.value(variable),
+                        "lp_reduced_cost": getattr(variable, "dj", None),
+                        "flow_direction": route.demand.flow_direction,
+                        "carrier_group": route.carrier.group,
+                        "vehicle_id": route.vehicle.id,
+                        "vehicle_name": getattr(route.vehicle, "name", ""),
+                        "starting_zip_code": route.starting_point.zip_code,
+                        "group_key": str(_group_key(route)),
+                        "pattern_key": self._stable_pattern_key(route.demand.pattern),
+                        "shipper_ids": self._shipper_ids(route),
+                        "shipper_names": self._shipper_names(route),
+                        "shipper_count": len(route.demand.pattern.shippers),
+                        "frequency": frequency,
+                        "total_cost": total_cost,
+                        "roundtrip_total_cost": roundtrip_total_cost,
+                        "unit_cost": (total_cost / frequency) if frequency else 0,
+                        "roundtrip_unit_cost": (
+                                roundtrip_total_cost / frequency
+                        ) if frequency else 0,
+                        "pair_delta_per_frequency": self.route_pair_delta[route],
+                        "tariff_base_cost": getattr(route.tariff, "base_cost", None),
+                        "tariff_roundtrip_base_cost": getattr(
+                            route.tariff, "roundtrip_base_cost", None
+                        ),
+                        "in_existing_network": (
+                            route.demand.pattern in self.existing_parts_patterns
+                            if route.demand.flow_direction == "parts"
+                            else route.demand.pattern in self.existing_empties_patterns
+                        ),
+                        "is_fixed_route": (
+                                route in self.fixed_parts_routes
+                                or route in self.fixed_empties_routes
+                        ),
+                        "pair_options_count": len(
+                            self.pairs_by_parts_route.get(route, [])
+                            if route.demand.flow_direction == "parts"
+                            else self.pairs_by_empties_route.get(route, [])
+                        ),
+                    }
+                )
+
+    def _write_lp_pairs_csv(
+            self,
+            csv_path: Path,
+            lp_model,
+            pair_frequency,
+            lp_status: str,
+    ) -> None:
+        sorted_pairs = sorted(
+            self.feasible_pair_allocations,
+            key=lambda pair: (
+                self._stable_route_key(pair[0]),
+                self._stable_route_key(pair[1]),
+            ),
+        )
+
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "lp_status",
+                    "lp_objective_value",
+                    "lp_variable_name",
+                    "lp_value",
+                    "lp_reduced_cost",
+                    "pair_saving_per_frequency",
+                    "parts_route_key",
+                    "empties_route_key",
+                    "parts_vehicle_id",
+                    "empties_vehicle_id",
+                    "parts_zip_code",
+                    "empties_zip_code",
+                    "parts_pattern_key",
+                    "empties_pattern_key",
+                    "parts_frequency",
+                    "empties_frequency",
+                    "parts_total_cost",
+                    "empties_total_cost",
+                    "parts_roundtrip_total_cost",
+                    "empties_roundtrip_total_cost",
+                ],
+            )
+            writer.writeheader()
+
+            lp_objective_value = pulp.value(lp_model.objective)
+
+            for pair in sorted_pairs:
+                parts_route, empties_route = pair
+                variable = pair_frequency[pair]
+
+                writer.writerow(
+                    {
+                        "lp_status": lp_status,
+                        "lp_objective_value": lp_objective_value,
+                        "lp_variable_name": variable.name,
+                        "lp_value": pulp.value(variable),
+                        "lp_reduced_cost": getattr(variable, "dj", None),
+                        "pair_saving_per_frequency": self.pair_saving_per_frequency[pair],
+                        "parts_route_key": str(self._stable_route_key(parts_route)),
+                        "empties_route_key": str(self._stable_route_key(empties_route)),
+                        "parts_vehicle_id": parts_route.vehicle.id,
+                        "empties_vehicle_id": empties_route.vehicle.id,
+                        "parts_zip_code": parts_route.starting_point.zip_code,
+                        "empties_zip_code": empties_route.starting_point.zip_code,
+                        "parts_pattern_key": self._stable_pattern_key(
+                            parts_route.demand.pattern
+                        ),
+                        "empties_pattern_key": self._stable_pattern_key(
+                            empties_route.demand.pattern
+                        ),
+                        "parts_frequency": self.route_frequency[parts_route],
+                        "empties_frequency": self.route_frequency[empties_route],
+                        "parts_total_cost": self.route_total_cost[parts_route],
+                        "empties_total_cost": self.route_total_cost[empties_route],
+                        "parts_roundtrip_total_cost": self.route_roundtrip_total_cost[
+                            parts_route
+                        ],
+                        "empties_roundtrip_total_cost": self.route_roundtrip_total_cost[
+                            empties_route
+                        ],
+                    }
+                )
+
+    def run_conservative_lp_route_pruning(
+            self,
+            *,
+            lp_value_epsilon: float = 1e-6,
+            reduced_cost_floor: float = 50.0,
+            reduced_cost_ratio: float = 0.02,
+            keep_top_n_per_shipper: int = 60,
+            solver=None,
+    ) -> None:
+        """
+        Conservative LP-based pruning pass.
+
+        A route is kept if ANY of these holds:
+        - LP relaxation uses it (lp_value > lp_value_epsilon)
+        - its reduced cost is small enough:
+            reduced_cost <= max(reduced_cost_floor, reduced_cost_ratio * total_cost)
+        - it is among the top-N routes for at least one covered shipper,
+          ranked by (reduced cost, -lp_value, total_cost, stable key)
+
+        This is intentionally conservative to reduce risk of removing
+        routes that may matter in the integer solve.
+        """
+
+        if not self.parts_routes and not self.empties_routes:
+            return
+
+        self.progress_tracker("Running conservative LP-based route pruning pass")
+
+        lp_result = self._solve_lp_relaxation_for_pruning(solver=solver)
+        if lp_result["status"] != "Optimal":
+            self.progress_tracker(
+                f"Skipping LP pruning because relaxation status is {lp_result['status']}"
+            )
+            return
+
+        parts_lp_values = lp_result["parts_lp_values"]
+        empties_lp_values = lp_result["empties_lp_values"]
+        parts_reduced_costs = lp_result["parts_reduced_costs"]
+        empties_reduced_costs = lp_result["empties_reduced_costs"]
+
+        kept_parts_routes = self._select_routes_to_keep_from_lp(
+            routes=self.parts_routes,
+            shippers=self.parts_shippers,
+            lp_values=parts_lp_values,
+            reduced_costs=parts_reduced_costs,
+            lp_value_epsilon=lp_value_epsilon,
+            reduced_cost_floor=reduced_cost_floor,
+            reduced_cost_ratio=reduced_cost_ratio,
+            keep_top_n_per_shipper=keep_top_n_per_shipper,
+        )
+        kept_empties_routes = self._select_routes_to_keep_from_lp(
+            routes=self.empties_routes,
+            shippers=self.empties_shippers,
+            lp_values=empties_lp_values,
+            reduced_costs=empties_reduced_costs,
+            lp_value_epsilon=lp_value_epsilon,
+            reduced_cost_floor=reduced_cost_floor,
+            reduced_cost_ratio=reduced_cost_ratio,
+            keep_top_n_per_shipper=keep_top_n_per_shipper,
+        )
+
+        removed_parts = len(self.parts_routes) - len(kept_parts_routes)
+        removed_empties = len(self.empties_routes) - len(kept_empties_routes)
+
+        self.parts_routes = kept_parts_routes
+        self.empties_routes = kept_empties_routes
+
+        filtered_cache_keys = (
+                self.parts_routes
+                | self.empties_routes
+                | self.fixed_parts_routes
+                | self.fixed_empties_routes
+        )
+
+        self.route_frequency = {
+            route: value
+            for route, value in self.route_frequency.items()
+            if route in filtered_cache_keys
+        }
+        self.route_total_cost = {
+            route: value
+            for route, value in self.route_total_cost.items()
+            if route in filtered_cache_keys
+        }
+        self.route_roundtrip_total_cost = {
+            route: value
+            for route, value in self.route_roundtrip_total_cost.items()
+            if route in filtered_cache_keys
+        }
+        self.route_pair_delta = {
+            route: value
+            for route, value in self.route_pair_delta.items()
+            if route in filtered_cache_keys
+        }
+
+        self.rebuild_route_group_indexes()
+        self.build_feasible_pair_allocations()
+
+        self.progress_tracker(
+            f"LP pruning removed {removed_parts} parts routes and "
+            f"{removed_empties} empties routes"
+        )
+
+    def _solve_lp_relaxation_for_pruning(self, solver=None) -> dict:
+        sorted_parts_routes = sorted(self.parts_routes, key=self._stable_route_key)
+        sorted_empties_routes = sorted(self.empties_routes, key=self._stable_route_key)
+        sorted_pairs = sorted(
+            self.feasible_pair_allocations,
+            key=lambda pair: (
+                self._stable_route_key(pair[0]),
+                self._stable_route_key(pair[1]),
+            ),
+        )
+
+        lp_model = pulp.LpProblem("Atomic_Route_Allocation_LP_Prune", pulp.LpMinimize)
+
+        use_parts_route = pulp.LpVariable.dicts(
+            name="use_parts_route_lp_prune",
+            indices=sorted_parts_routes,
+            lowBound=0,
+            upBound=1,
+            cat="Continuous",
+        )
+        use_empties_route = pulp.LpVariable.dicts(
+            name="use_empties_route_lp_prune",
+            indices=sorted_empties_routes,
+            lowBound=0,
+            upBound=1,
+            cat="Continuous",
+        )
+        pair_frequency = pulp.LpVariable.dicts(
+            name="pair_frequency_lp_prune",
+            indices=sorted_pairs,
+            lowBound=0,
+            cat="Continuous",
+        )
+
+        lp_model += (
+                pulp.lpSum(
+                    self.route_total_cost[r] * use_parts_route[r]
+                    for r in sorted_parts_routes
+                )
+                + pulp.lpSum(
+            self.route_total_cost[r] * use_empties_route[r]
+            for r in sorted_empties_routes
+        )
+                - pulp.lpSum(
+            self.pair_saving_per_frequency[pair] * pair_frequency[pair]
+            for pair in sorted_pairs
+        )
+        )
+
+        for shipper in sorted(
+                self.parts_shippers, key=lambda s: getattr(s, "id", str(s))
+        ):
+            lp_model += (
+                    pulp.lpSum(
+                        use_parts_route[route]
+                        for route in sorted_parts_routes
+                        if shipper in route.demand.pattern.shippers
+                    )
+                    == 1
+            )
+
+        for shipper in sorted(
+                self.empties_shippers, key=lambda s: getattr(s, "id", str(s))
+        ):
+            lp_model += (
+                    pulp.lpSum(
+                        use_empties_route[route]
+                        for route in sorted_empties_routes
+                        if shipper in route.demand.pattern.shippers
+                    )
+                    == 1
+            )
+
+        for parts_route in sorted_parts_routes:
+            lp_model += (
+                    pulp.lpSum(
+                        pair_frequency[pair]
+                        for pair in self.pairs_by_parts_route.get(parts_route, [])
+                    )
+                    <= self.route_frequency[parts_route] * use_parts_route[parts_route]
+            )
+
+        for empties_route in sorted_empties_routes:
+            lp_model += (
+                    pulp.lpSum(
+                        pair_frequency[pair]
+                        for pair in self.pairs_by_empties_route.get(empties_route, [])
+                    )
+                    <= self.route_frequency[empties_route] * use_empties_route[empties_route]
+            )
+
+        for fixed_parts_route in sorted(
+                self.fixed_parts_routes, key=self._stable_route_key
+        ):
+            lp_model += (
+                    pulp.lpSum(
+                        pair_frequency[pair]
+                        for pair in self.pairs_by_parts_route.get(fixed_parts_route, [])
+                    )
+                    <= self.route_frequency[fixed_parts_route]
+            )
+
+        for fixed_empties_route in sorted(
+                self.fixed_empties_routes, key=self._stable_route_key
+        ):
+            lp_model += (
+                    pulp.lpSum(
+                        pair_frequency[pair]
+                        for pair in self.pairs_by_empties_route.get(fixed_empties_route, [])
+                    )
+                    <= self.route_frequency[fixed_empties_route]
+            )
+
+        if solver is None:
+            solver = pulp.PULP_CBC_CMD(msg=False)
+
+        lp_model.solve(solver)
+        status = pulp.LpStatus[lp_model.status]
+
+        return {
+            "status": status,
+            "parts_lp_values": {
+                route: float(pulp.value(var) or 0.0)
+                for route, var in use_parts_route.items()
+            },
+            "empties_lp_values": {
+                route: float(pulp.value(var) or 0.0)
+                for route, var in use_empties_route.items()
+            },
+            "parts_reduced_costs": {
+                route: float(var.dj or 0.0)
+                for route, var in use_parts_route.items()
+            },
+            "empties_reduced_costs": {
+                route: float(var.dj or 0.0)
+                for route, var in use_empties_route.items()
+            },
+            "pair_lp_values": {
+                pair: float(pulp.value(var) or 0.0)
+                for pair, var in pair_frequency.items()
+            },
+            "pair_reduced_costs": {
+                pair: float(var.dj or 0.0)
+                for pair, var in pair_frequency.items()
+            },
+        }
+
+    def _select_routes_to_keep_from_lp(
+            self,
+            *,
+            routes: set[DirectRoute],
+            shippers: set[Shipper],
+            lp_values: dict[DirectRoute, float],
+            reduced_costs: dict[DirectRoute, float],
+            lp_value_epsilon: float,
+            reduced_cost_floor: float,
+            reduced_cost_ratio: float,
+            keep_top_n_per_shipper: int,
+    ) -> set[DirectRoute]:
+        kept_routes = set()
+
+        def reduced_cost_threshold(route: DirectRoute) -> float:
+            return max(
+                reduced_cost_floor,
+                reduced_cost_ratio * self.route_total_cost[route],
+            )
+
+        def ranking_key(route: DirectRoute) -> tuple:
+            rc = reduced_costs.get(route, 0.0)
+            lp = lp_values.get(route, 0.0)
+            return (
+                rc,
+                -lp,
+                self.route_frequency[route],
+                self.route_total_cost[route],
+                self._stable_route_key(route),
+            )
+
+        # Global conservative keep rules
+        for route in routes:
+            lp_value = lp_values.get(route, 0.0)
+            reduced_cost = reduced_costs.get(route, 0.0)
+
+            if lp_value > lp_value_epsilon:
+                kept_routes.add(route)
+                continue
+
+            if reduced_cost <= reduced_cost_threshold(route):
+                kept_routes.add(route)
+
+        # Per-shipper safety net: always keep top-N competitive routes
+        sorted_routes = sorted(routes, key=ranking_key)
+
+        for shipper in shippers:
+            shipper_routes = [
+                route
+                for route in sorted_routes
+                if shipper in route.demand.pattern.shippers
+            ]
+            kept_routes.update(shipper_routes[:keep_top_n_per_shipper])
+
+        return kept_routes
+
+    def run_conservative_lp_pair_pruning(
+        self,
+        *,
+        lp_value_epsilon: float = 1e-6,
+        reduced_cost_floor: float = 20.0,
+        reduced_cost_ratio: float = 0.05,
+        keep_top_n_per_parts_route: int = 8,
+        keep_top_n_per_empties_route: int = 8,
+        keep_top_n_by_saving_per_parts_route: int = 6,
+        keep_top_n_by_saving_per_empties_route: int = 6,
+        solver=None,
+    ) -> None:
+        """
+        Conservative LP-based pruning pass for pair variables.
+
+        A pair is kept if ANY of these holds:
+        - LP relaxation uses it (lp_value > lp_value_epsilon)
+        - its reduced cost is small enough:
+            reduced_cost <= max(reduced_cost_floor, reduced_cost_ratio * pair_saving)
+        - it is among the top-N pairs for either incident route by reduced-cost ranking
+        - it is among the top-N pairs for either incident route by raw saving
+
+        This is intentionally conservative to reduce risk of removing
+        useful roundtrip opportunities.
+        """
+
+        if not self.feasible_pair_allocations:
+            return
+
+        self.progress_tracker("Running conservative LP-based pair pruning pass")
+
+        lp_result = self._solve_lp_relaxation_for_pruning(solver=solver)
+        if lp_result["status"] != "Optimal":
+            self.progress_tracker(
+                f"Skipping LP pair pruning because relaxation status is {lp_result['status']}"
+            )
+            return
+
+        pair_lp_values = lp_result["pair_lp_values"]
+        pair_reduced_costs = lp_result["pair_reduced_costs"]
+
+        kept_pairs = self._select_pairs_to_keep_from_lp(
+            pairs=self.feasible_pair_allocations,
+            pair_lp_values=pair_lp_values,
+            pair_reduced_costs=pair_reduced_costs,
+            lp_value_epsilon=lp_value_epsilon,
+            reduced_cost_floor=reduced_cost_floor,
+            reduced_cost_ratio=reduced_cost_ratio,
+            keep_top_n_per_parts_route=keep_top_n_per_parts_route,
+            keep_top_n_per_empties_route=keep_top_n_per_empties_route,
+            keep_top_n_by_saving_per_parts_route=keep_top_n_by_saving_per_parts_route,
+            keep_top_n_by_saving_per_empties_route=keep_top_n_by_saving_per_empties_route,
+        )
+
+        removed_pairs = len(self.feasible_pair_allocations) - len(kept_pairs)
+
+        self.feasible_pair_allocations = sorted(
+            kept_pairs,
+            key=lambda pair: (
+                self._stable_route_key(pair[0]),
+                self._stable_route_key(pair[1]),
+            ),
+        )
+
+        self.pair_saving_per_frequency = {
+            pair: value
+            for pair, value in self.pair_saving_per_frequency.items()
+            if pair in kept_pairs
+        }
+
+        self.pairs_by_parts_route.clear()
+        self.pairs_by_empties_route.clear()
+        for pair in self.feasible_pair_allocations:
+            parts_route, empties_route = pair
+            self.pairs_by_parts_route[parts_route].append(pair)
+            self.pairs_by_empties_route[empties_route].append(pair)
+
+        self.progress_tracker(f"LP pair pruning removed {removed_pairs} pair allocations")
+
+    def _select_pairs_to_keep_from_lp(
+        self,
+        *,
+        pairs: list[tuple[DirectRoute, DirectRoute]],
+        pair_lp_values: dict[tuple[DirectRoute, DirectRoute], float],
+        pair_reduced_costs: dict[tuple[DirectRoute, DirectRoute], float],
+        lp_value_epsilon: float,
+        reduced_cost_floor: float,
+        reduced_cost_ratio: float,
+        keep_top_n_per_parts_route: int,
+        keep_top_n_per_empties_route: int,
+        keep_top_n_by_saving_per_parts_route: int,
+        keep_top_n_by_saving_per_empties_route: int,
+    ) -> set[tuple[DirectRoute, DirectRoute]]:
+        kept_pairs: set[tuple[DirectRoute, DirectRoute]] = set()
+
+        def reduced_cost_threshold(pair: tuple[DirectRoute, DirectRoute]) -> float:
+            saving = self.pair_saving_per_frequency[pair]
+            return max(reduced_cost_floor, reduced_cost_ratio * saving)
+
+        def pair_rank_key(pair: tuple[DirectRoute, DirectRoute]) -> tuple:
+            rc = pair_reduced_costs.get(pair, 0.0)
+            lp = pair_lp_values.get(pair, 0.0)
+            parts_route, empties_route = pair
+            return (
+                rc,
+                -lp,
+                -self.pair_saving_per_frequency[pair],
+                self.route_frequency[parts_route] + self.route_frequency[empties_route],
+                self._stable_route_key(parts_route),
+                self._stable_route_key(empties_route),
+            )
+
+        def saving_rank_key(pair: tuple[DirectRoute, DirectRoute]) -> tuple:
+            parts_route, empties_route = pair
+            return (
+                -self.pair_saving_per_frequency[pair],
+                pair_reduced_costs.get(pair, 0.0),
+                -pair_lp_values.get(pair, 0.0),
+                self.route_frequency[parts_route] + self.route_frequency[empties_route],
+                self._stable_route_key(parts_route),
+                self._stable_route_key(empties_route),
+            )
+
+        # Global conservative keep rules
+        for pair in pairs:
+            lp_value = pair_lp_values.get(pair, 0.0)
+            reduced_cost = pair_reduced_costs.get(pair, 0.0)
+
+            if lp_value > lp_value_epsilon:
+                kept_pairs.add(pair)
+                continue
+
+            if reduced_cost <= reduced_cost_threshold(pair):
+                kept_pairs.add(pair)
+
+        # Per-parts-route safety net by reduced-cost competitiveness
+        for parts_route, route_pairs in self.pairs_by_parts_route.items():
+            ranked_pairs = sorted(route_pairs, key=pair_rank_key)
+            kept_pairs.update(ranked_pairs[:keep_top_n_per_parts_route])
+
+        # Per-empties-route safety net by reduced-cost competitiveness
+        for empties_route, route_pairs in self.pairs_by_empties_route.items():
+            ranked_pairs = sorted(route_pairs, key=pair_rank_key)
+            kept_pairs.update(ranked_pairs[:keep_top_n_per_empties_route])
+
+        # Per-route safety net by raw savings
+        for parts_route, route_pairs in self.pairs_by_parts_route.items():
+            ranked_pairs = sorted(route_pairs, key=saving_rank_key)
+            kept_pairs.update(ranked_pairs[:keep_top_n_by_saving_per_parts_route])
+
+        for empties_route, route_pairs in self.pairs_by_empties_route.items():
+            ranked_pairs = sorted(route_pairs, key=saving_rank_key)
+            kept_pairs.update(ranked_pairs[:keep_top_n_by_saving_per_empties_route])
+
+        return kept_pairs
