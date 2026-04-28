@@ -112,7 +112,7 @@ def validate_ftl_missing_tariffs(routes: set[DirectRoute]) -> None:
             "cofor": route.demand.starting_point.cofor,
             "carrier": route.demand.carrier.group,
             "vehicle": route.vehicle.id,
-            "deviation_bucket": route.demand.deviation_bin,
+            "deviation_bucket": route.deviation_bin,
         }
         for route in routes
         if route.tariff_source == "Missing"
@@ -127,7 +127,7 @@ def validate_ltl_missing_tariffs(routes: set[FirstLegRoute]) -> None:
             "zip_key": route.demand.starting_point.zip_key(5),
             "cofor": route.demand.starting_point.cofor,
             "carrier": route.demand.carrier.group,
-            "destination": route.destination,
+            "destination": route.destination.cofor,
             "weight_bracket": route.costing.weight_bracket_ltl(route),
         }
         for route in routes
@@ -179,6 +179,9 @@ class BaselineBuilder:
     def _log(self, msg: str):
         if self.logger:
             self.logger(msg)
+
+    def _log_missing_tariffs(self, exc: MissingTariffsError) -> None:
+        self._log(str(exc))
 
     def build_context(self):
         self._log("Loading Helper Data...")
@@ -343,7 +346,10 @@ class BaselineBuilder:
             if missing_routes:
                 self.tariffs_service.assign_hub_routes(missing_routes)
 
-            validate_ltl_missing_tariffs(route)
+            try:
+                validate_ltl_missing_tariffs(route)
+            except MissingTariffsError as exc:
+                self._log_missing_tariffs(exc)
             return
 
         if isinstance(route, LinehaulRoute):
@@ -352,7 +358,10 @@ class BaselineBuilder:
             else:
                 self.tariffs_service.assign_hub_linehaul(route)
 
-            validate_linehaul_missing_tariffs(route)
+            try:
+                validate_linehaul_missing_tariffs(route)
+            except MissingTariffsError as exc:
+                self._log_missing_tariffs(exc)
             return
 
         raise TypeError(f"Unsupported route type for hub fallback: {type(route)}")
@@ -371,26 +380,13 @@ class BaselineBuilder:
 
     def _assign_hub_tariffs(self, hubs: set[Hub]) -> None:
         for hub in hubs:
-            is_target = hub.cofor == "A00GUP  02"
-
             self._assign_with_hub_fallback(hub.parts_first_leg_routes)
             if hub.has_empties_flow:
                 self._assign_with_hub_fallback(hub.empties_first_leg_routes)
 
-            if is_target:
-                print(hub.parts_linehaul_route.tariff_key_bundle)
-                print(hub.empties_linehaul_route.tariff_key_bundle)
-
             self._assign_with_hub_fallback(hub.parts_linehaul_route)
-            if is_target:
-                r = hub.parts_linehaul_route
-                print(f"[DEBUG] {hub.cofor} parts_linehaul_route:", r.tariff, r.tariff_source)
-
             if hub.has_empties_flow:
                 self._assign_with_hub_fallback(hub.empties_linehaul_route)
-                if is_target:
-                    r = hub.empties_linehaul_route
-                    print(f"[DEBUG] {hub.cofor} empties_linehaul_route:", r.tariff, r.tariff_source)
 
     def _create_trips_global(self) -> set[Trip]:
         """
@@ -438,7 +434,12 @@ class BaselineBuilder:
         ).get_all()
 
         self.tariffs_service.assign_ftl_mr_routes(direct_routes)
-        validate_ftl_missing_tariffs(direct_routes)
+
+        try:
+            validate_ftl_missing_tariffs(direct_routes)
+        except MissingTariffsError as exc:
+            self._log_missing_tariffs(exc)
+
 
         parts_routes = {
             route

@@ -121,6 +121,10 @@ class TariffsTransformer:
     @staticmethod
     def _split_tariffs_key(tariffs: pd.DataFrame) -> pd.DataFrame:
         tariffs = tariffs.copy()
+        tariffs = tariffs[
+            tariffs["Tariff Key"].notna() &
+            (tariffs["Tariff Key"].str.strip() != "")
+            ]
         parts = tariffs["Tariff Key"].str.split("---")
         parts = parts.apply(lambda x: [p.strip() for p in x] if isinstance(x, list) else x)
         part_count = parts.str.len()
@@ -135,10 +139,13 @@ class TariffsTransformer:
 
         tariffs.loc[mask_4, "Means of Transport"] = parts[mask_4].str[1]
         tariffs.loc[mask_5, "Means of Transport"] = parts[mask_5].str[2]
+
         invalid = ~part_count.isin([3, 4, 5])
         if invalid.any():
-            bad_counts = sorted(part_count[invalid].unique().tolist())
-            raise ValueError(f"Unexpected Tariff Key format with parts counts: {bad_counts}")
+            bad_keys = tariffs.loc[invalid, "Tariff Key"].tolist()
+            print(bad_keys)
+            raise ValueError(f"Unexpected Tariff Key format. Invalid keys: {bad_keys}")
+
         return tariffs.drop(columns=["Tariff Key"])
 
 

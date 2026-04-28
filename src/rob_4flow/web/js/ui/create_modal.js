@@ -74,8 +74,6 @@ async function handleCreateClick() {
       return;
     }
     await streamTaskLogs(task, logBox);
-
-    closeModal()
     setAppBusy(false);
     showProjectPage();
   } catch (err) {

@@ -1,8 +1,11 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Literal
+
+import pandas as pd
 
 from .hub import Hub
 from .kpi_set import KPISet
+from .routes.first_leg_route import FirstLegRoute
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -112,6 +115,27 @@ class RegionalHubView:
     def empties_linehaul_route(self):
         return self.core_hub.empties_linehaul_route
 
+    @property
+    def empties_pre_carriage_costs(self):
+        return sum(r.total_cost for r in self.empties_first_leg_routes)
+
+    @property
+    def empties_total_cost(self):
+        return self.empties_pre_carriage_costs + self.empties_linehaul_route.total_cost
+
+    @property
+    def parts_pre_carriage_costs(self):
+        return sum(r.total_cost for r in self.parts_first_leg_routes)
+
+    @property
+    def parts_total_cost(self):
+        return self.parts_pre_carriage_costs + self.parts_linehaul_route.total_cost
+
+    @property
+    def pre_carriage_costs(self):
+        return self.parts_pre_carriage_costs + self.empties_pre_carriage_costs
+
+
     @staticmethod
     def _sum_route_cost(routes) -> float:
         return sum(route.total_cost for route in routes)
@@ -209,3 +233,144 @@ class RegionalHubView:
     @property
     def hub_all_kpis(self) -> KPISet:
         return self.hub_parts_kpis + self.hub_empties_kpis
+
+    def generate_route_name(self, flow_direction):
+        direction = "P" if flow_direction == "parts" else "E"
+        trip_type = "R" if self.has_empties_flow else "S"
+        return f"GD_{self.name} #{direction}{trip_type}"
+
+    def to_dataframe(self):
+        rows = []
+
+        def append_flow_rows(
+                flow: Literal["parts", "empties"],
+                first_leg_routes: set[FirstLegRoute],
+                linehaul_route,
+                flow_code: str,
+        ) -> None:
+            routes = sorted(
+                first_leg_routes,
+                key=lambda r: ((r.shipper.name or "").lower(), (r.shipper.cofor or "").lower())
+            )
+
+            first_hub_row = True
+
+            for route in routes:
+                route_name = self.generate_route_name(flow)
+                shipper = route.demand.shipper
+                demand = shipper.parts_demand if flow_code == "P" else shipper.empties_demand
+                sellers = sorted(
+                    demand.sellers,
+                    key=lambda s: ((s.name or "").lower(), (s.cofor or "").lower())
+                )
+
+                first_shipper_row = True
+
+                for seller in sellers:
+                    route_row = {
+                        'Route name': route_name,
+                        'HUB Name': self.name,
+                        'Shipper COFOR': shipper.cofor,
+                        'Seller COFOR': seller.cofor,
+                        'Hybrid COFOR': seller.cofor,
+                        'Plant COFOR': self.plant.cofor,
+                        'Parts or Empties': flow_code,
+                        'Docks (,)': '',
+                        'First pickup': '',
+                        'Total transit time (days)': '',
+                        'First delivery': '',
+                        'Carrier COFOR': shipper.carrier.cofor,
+                        'Carrier ID': shipper.carrier.id,
+                        'Carrier name': shipper.carrier.name,
+                        'Means of Transport': route.vehicle.id,
+                        'Transport Concept': 'todo',
+                        'SELLER NAME': seller.name,
+                        'SELLER ZIP CODE': seller.zip,
+                        'SELLER CITY': seller.city,
+                        'SELLER COUNTRY': seller.country,
+                        'SHIPPER NAME': shipper.name,
+                        'SHIPPER  ZIP CODE': shipper.zip_code,
+                        'SHIPPER CITY': shipper.city,
+                        'SHIPPER STREET': shipper.street,
+                        'SHIPPER COUNTRY': shipper.country,
+                        'SHIPPER SOURCING REGION': shipper.sourcing_region,
+                        'HEV: empties truck loading begins at Stellantis Plant': '',
+                        'HEE: empties truck leaving plant site at Stellantis Plant': '',
+                        'HMD: parts truck arrival at shipper location': '',
+                        'HEF: parts truck leaving shipper location': '',
+                        'Pick Mon': '',
+                        'Pick Tue': '',
+                        'Pick Wed': '',
+                        'Pick Thu': '',
+                        'Pick Fri': '',
+                        'Pick Sat': '',
+                        'Pick Sun': '',
+                        'Frequency / week': route.frequency,
+                        'DEL Mon': '',
+                        'DEL Tue': '',
+                        'DEL Wed': '',
+                        'DEL Thu': '',
+                        'DEL Fri': '',
+                        'DEL Sat': '',
+                        'DEL Sun': '',
+                        'HAS: parts truck arrival at Stellantis plant': '',
+                        'Parts truck unloading starts in last dock at Stellantis Plant': '',
+                        'HDE: Empties truck arrival at supplier': '',
+                        'Empties truck unloading complete at supplier location': '',
+                        'PLE: HAS': '',
+                        'PLE: HRQ/HEE Dock 1': '',
+                        'PLE: HRQ/HEE Dock 2': '',
+                        'PLE: HRQ/HEE Dock 3': '',
+                        'PLE: HRQ/HEE Dock 4': '',
+                        'PLE: HRQ/HEE Dock 5': '',
+                        'PLE: HRQ/HEE Dock 6': '',
+                        'PLE: HRQ/HEE Dock 7': '',
+                        'PLE: HRQ/HEE Dock 8': '',
+                        'Avg. Loading Meters / week': demand.loading_meters if first_shipper_row else '',
+                        'Avg. Weight / week': demand.weight if first_shipper_row else '',
+                        'Avg. Volume / week': demand.volume if first_shipper_row else '',
+                        'Avg. Loading Meters / week (Linehaul)': linehaul_route.loading_meters if first_hub_row else '',
+                        'Avg. Loading Meters / transport': (
+                            linehaul_route.loading_meters / linehaul_route.frequency
+                            if first_hub_row and linehaul_route.frequency else (0 if first_hub_row else '')
+                        ),
+                        'Avg. Weight / week (Linehaul)': linehaul_route.weight if first_hub_row else '',
+                        'Avg. Weight / transport': (
+                            linehaul_route.weight / linehaul_route.frequency
+                            if first_hub_row and linehaul_route.frequency else (0 if first_hub_row else '')
+                        ),
+                        'Avg. Volume / week on route': linehaul_route.volume if first_hub_row else '',
+                        'Avg. Volume / transport': (
+                            linehaul_route.volume / linehaul_route.frequency
+                            if first_hub_row and linehaul_route.frequency else (0 if first_hub_row else '')
+                        ),
+                        'Avg. Loading meter utilization in %': linehaul_route.loading_meters_utilization if first_hub_row else '',
+                        'Avg. Weight utilization in %': linehaul_route.weight_utilization if first_hub_row else '',
+                        'Avg. Volume utilization in %': linehaul_route.volume_utilization if first_hub_row else '',
+                        'Max. Utilization in %': linehaul_route.utilization if first_hub_row else '',
+                        'Pre/on carriage total costs': self.pre_carriage_costs if first_hub_row else '',
+                        'Pre/on carriage costs per week': self.pre_carriage_costs if first_hub_row else '',
+                        'Linehaul total costs': linehaul_route.route_cost if first_hub_row else '',
+                        'Linehaul costs per week': linehaul_route.total_cost if first_hub_row else '',
+                        '[PERS. COLUMN] Original Network': shipper.original_network,
+                    }
+                    rows.append(route_row)
+                    first_shipper_row = False
+                    first_hub_row = False
+
+        append_flow_rows(
+            flow="parts",
+            first_leg_routes=self.parts_first_leg_routes,
+            linehaul_route=self.parts_linehaul_route,
+            flow_code="P",
+        )
+
+        if self.has_empties_flow:
+            append_flow_rows(
+                flow="empties",
+                first_leg_routes=self.empties_first_leg_routes,
+                linehaul_route=self.empties_linehaul_route,
+                flow_code="E",
+            )
+
+        return pd.DataFrame(rows)

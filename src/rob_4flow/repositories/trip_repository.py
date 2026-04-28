@@ -30,26 +30,26 @@ class TripRepository:
             self._df["Roundtrip identifier"].notna()
             & (self._df["Roundtrip identifier"].astype(str).str.strip() != "")
         ]
-        print(
-            roundtrip_rows[["Roundtrip identifier", "Route name", "Parts or Empties"]]
-            .value_counts()
-        )
 
         singletrip_rows = self._df[
             self._df["Roundtrip identifier"].isna()
             | (self._df["Roundtrip identifier"].astype(str).str.strip() == "")
         ]
+
         print(
-            singletrip_rows[["Route name", "Parts or Empties", "Roundtrip identifier"]]
-            .value_counts()
+            roundtrip_rows[
+                roundtrip_rows["Roundtrip identifier"].astype(str).str.strip().eq("42")
+            ][["Roundtrip identifier", "Route name", "Parts or Empties"]]
         )
 
         roundtrip_map: dict[str, dict[str, str | int | None]] = {}
 
         for _, row in roundtrip_rows.iterrows():
             roundtrip_id = str(row["Roundtrip identifier"]).strip()
+            if roundtrip_id in {"42", "42.0"}:
+                print("DEBUG 42:", repr(roundtrip_id), repr(route_name), repr(demand_type))
             route_name = row["Route name"]
-            demand_type = row["Parts or Empties"]
+            demand_type = str(row["Parts or Empties"]).strip()
 
             if roundtrip_id not in roundtrip_map:
                 roundtrip_map[roundtrip_id] = {

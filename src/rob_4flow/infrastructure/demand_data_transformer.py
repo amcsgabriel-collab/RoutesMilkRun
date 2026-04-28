@@ -160,15 +160,35 @@ class DemandDataTransformer:
             agg_dict[col] = "first"
         return agg_dict
 
-
-    def export_database(self):
-        pass
-
     def aggregated_database_by_route(self):
-        key = ['Route name', 'Shipper COFOR']
+        key = [
+            'Route name',
+            'Shipper COFOR',
+            'Parts or Empties',
+            'Roundtrip identifier',
+        ]
+
+        print(
+            self.database[
+                self.database["Route name"].isin([
+                    "OPEL ES EMB RT4/FR01#P",
+                ])
+            ][["Route name", "Shipper COFOR", "Parts or Empties", "Roundtrip identifier"]]
+        )
+
+
         self.aggregated_database = (
             self.database
-            .groupby(key, as_index=False)
+            .groupby(key, as_index=False, dropna=False)
             .agg(self.make_aggregation_dict(key))
         )
+
+        print(
+            self.aggregated_database[
+                self.aggregated_database["Route name"].isin([
+                    "OPEL ES EMB RT4/FS01#P",
+                ])
+            ][["Route name", "Parts or Empties", "Roundtrip identifier"]]
+        )
+
         return self.aggregated_database
