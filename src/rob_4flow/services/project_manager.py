@@ -64,12 +64,17 @@ class ProjectManager:
             except KeyError:
                 trips = self.current_scenario.find_shipper_trips(shipper, flow_direction)
                 if trips:
-                    trip = trips[0]
-                    route = trip.parts_route if flow_direction == "parts" else trip.empties_route
-                    if route:
+                    route_names = [
+                        (trip.parts_route if flow_direction == "parts" else trip.empties_route)
+                        .demand.pattern.route_name
+                        for trip in trips
+                        if (trip.parts_route if flow_direction == "parts" else trip.empties_route)
+                    ]
+
+                    if route_names:
                         return {
                             "type": "Direct",
-                            "name": route.demand.pattern.route_name,
+                            "name": ", ".join(sorted(set(route_names))),
                         }
             return {
                 "type": "N/A",

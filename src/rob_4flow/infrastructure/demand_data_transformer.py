@@ -47,7 +47,6 @@ class DemandDataTransformer:
 
         columns = ['Means of Transport', 'Transport concept', 'Carrier ID', 'Carrier COFOR', 'Carrier Name']
         for col in columns:
-            print(col)
             create_linehaul_first_leg_columns(col)
 
 
@@ -168,27 +167,10 @@ class DemandDataTransformer:
             'Roundtrip identifier',
         ]
 
-        print(
-            self.database[
-                self.database["Route name"].isin([
-                    "OPEL ES EMB RT4/FR01#P",
-                ])
-            ][["Route name", "Shipper COFOR", "Parts or Empties", "Roundtrip identifier"]]
-        )
-
-
         self.aggregated_database = (
             self.database
             .groupby(key, as_index=False, dropna=False)
             .agg(self.make_aggregation_dict(key))
-        )
-
-        print(
-            self.aggregated_database[
-                self.aggregated_database["Route name"].isin([
-                    "OPEL ES EMB RT4/FS01#P",
-                ])
-            ][["Route name", "Parts or Empties", "Roundtrip identifier"]]
         )
 
         return self.aggregated_database

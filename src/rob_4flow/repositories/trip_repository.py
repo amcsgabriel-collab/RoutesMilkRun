@@ -36,32 +36,35 @@ class TripRepository:
             | (self._df["Roundtrip identifier"].astype(str).str.strip() == "")
         ]
 
-        print(
-            roundtrip_rows[
-                roundtrip_rows["Roundtrip identifier"].astype(str).str.strip().eq("42")
-            ][["Roundtrip identifier", "Route name", "Parts or Empties"]]
-        )
-
-        roundtrip_map: dict[str, dict[str, str | int | None]] = {}
+        roundtrip_map: dict[str, dict[str, set[str]]] = {}
 
         for _, row in roundtrip_rows.iterrows():
             roundtrip_id = str(row["Roundtrip identifier"]).strip()
-            if roundtrip_id in {"42", "42.0"}:
-                print("DEBUG 42:", repr(roundtrip_id), repr(route_name), repr(demand_type))
             route_name = row["Route name"]
             demand_type = str(row["Parts or Empties"]).strip()
 
             if roundtrip_id not in roundtrip_map:
-                roundtrip_map[roundtrip_id] = {
-                    "P": None,
-                    "E": None,
-                }
+                roundtrip_map[roundtrip_id] = {"P": set(), "E": set()}
 
-            roundtrip_map[roundtrip_id][demand_type] = route_name
+            roundtrip_map[roundtrip_id][demand_type].add(route_name)
 
+        # Validate roundtrip_id integrity in source data.
+        invalid = []
         for roundtrip_id, data in roundtrip_map.items():
-            parts_route_name = data["P"]
-            empties_route_name = data["E"]
+            if len(data["P"]) != 1 or len(data["E"]) != 1:
+                invalid.append(
+                    f"{roundtrip_id}: P={data['P']} E={data['E']}"
+                )
+        if invalid:
+            raise ValueError(
+                "Invalid roundtrip IDs (expected exactly 1 parts and 1 empties route):\n"
+                + "\n".join(invalid)
+            )
+
+        # Actually create round trips from the map.
+        for roundtrip_id, data in roundtrip_map.items():
+            parts_route_name = next(iter(data["P"]))
+            empties_route_name = next(iter(data["E"]))
 
             if parts_route_name is None:
                 raise KeyError(f"Missing parts route name for roundtrip ID '{roundtrip_id}'")
