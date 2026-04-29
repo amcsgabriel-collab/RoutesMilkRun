@@ -126,6 +126,7 @@ class RoutePattern:
             shippers=new_shippers,
             plant=self.plant,
             flow_direction=self.flow_direction,
+            route_name=self.route_name,
         )
         new_pattern.shipper_allocation = {
             s: self.shipper_allocation[s]

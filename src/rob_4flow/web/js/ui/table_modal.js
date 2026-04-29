@@ -51,10 +51,11 @@ export async function openTableModal(config) {
   openModal(html);
 
   const state = {
-    list: [],
-    rows: [],
-    columnFilters: {}
-  };
+  list: [],
+  rows: [],
+  columnFilters: {},
+  expandedRows: new Set()
+};
 
   async function loadAndRender() {
     const tbody = $id(config.tbodyId);
@@ -85,9 +86,25 @@ export async function openTableModal(config) {
 
       const visibleRows = state.rows.filter(row => matchesFilters(row, config, state));
 
-      tbody.innerHTML = visibleRows.length
-        ? visibleRows.map((row, i) => renderRow(row, i, config.columns)).join("")
-        : tableMessage(config.columns.length, config.emptyText?.(flow) || "No rows");
+        visibleRows.forEach(row => {
+          row._expanded = state.expandedRows.has(row._rowId);
+        });
+
+        tbody.innerHTML = visibleRows.length
+          ? visibleRows.map((row, i) =>
+              renderRow(row, i, config.columns, config, state)
+            ).join("")
+          : tableMessage(config.columns.length, config.emptyText?.(flow) || "No rows");
+
+      tbody.querySelectorAll(".table-expand-btn").forEach(btn => {
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+
+        const rowId = btn.dataset.expandRow;
+
+        toggleChildRows(rowId, config, state);
+      });
+    });
     } catch (e) {
       if (err) {
         err.textContent = e.message || String(e);
@@ -107,9 +124,11 @@ export async function openTableModal(config) {
   await loadAndRender();
 }
 
-function renderRow(row, i, columns) {
-  return `
-    <tr class="sh-row" data-idx="${i}" style="cursor:default">
+function renderRow(row, i, columns, config = {}, state = {}) {
+  row._rowId = row._rowId ?? `row-${i}`;
+
+  const mainRow = `
+    <tr class="sh-row" data-row-id="${row._rowId}" style="cursor:default">
       ${columns.map(col => `
         <td style="${cellStyle(col)}">
           ${col.render ? col.render(row) : text(row[col.key])}
@@ -117,7 +136,52 @@ function renderRow(row, i, columns) {
       `).join("")}
     </tr>
   `;
+
+  return mainRow;
 }
+
+function renderChildRow(child, columns, config, parentRowId) {
+  return `
+    <tr class="table-child-row" data-child-of="${escapeHtml(parentRowId)}">
+      ${columns.map(col => `
+        <td style="${cellStyle(col)};background:#f8fafc">
+          ${config.childRender?.[col.key] ? config.childRender[col.key](child) : ""}
+        </td>
+      `).join("")}
+    </tr>
+  `;
+}
+
+function toggleChildRows(rowId, config, state) {
+  const parentRow = document.querySelector(`tr[data-row-id="${CSS.escape(rowId)}"]`);
+  if (!parentRow) return;
+
+  const existing = document.querySelectorAll(`tr[data-child-of="${CSS.escape(rowId)}"]`);
+
+  if (existing.length) {
+    existing.forEach(row => row.remove());
+    state.expandedRows.delete(rowId);
+
+    const btn = parentRow.querySelector(".table-expand-btn");
+    if (btn) btn.textContent = "+";
+
+    return;
+  }
+
+  const parentData = state.rows.find(row => row._rowId === rowId);
+  if (!parentData?.children?.length) return;
+
+  const html = parentData.children
+    .map(child => renderChildRow(child, config.columns, config, rowId))
+    .join("");
+
+  parentRow.insertAdjacentHTML("afterend", html);
+  state.expandedRows.add(rowId);
+
+  const btn = parentRow.querySelector(".table-expand-btn");
+  if (btn) btn.textContent = "−";
+}
+
 
 function cellStyle(col) {
   return [

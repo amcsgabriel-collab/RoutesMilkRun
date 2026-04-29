@@ -537,6 +537,16 @@ h1, h2 {
   vertical-align: middle;
 }
 
+.routes-table thead th,
+.shippers-table thead th,
+.hubs-table thead th,
+.vehicles-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+}
+
 .th-content {
   display: flex;
   align-items: center;

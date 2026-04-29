@@ -4,6 +4,12 @@
 
 <div class="modal-body">
   <div class="modal-controls" style="margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+    <input
+      id="routes-filter"
+      type="text"
+      placeholder="Search routes, vehicles, roundtrips, shippers..."
+      style="padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;min-width:280px;"
+    />
     <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
       <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
         <input type="radio" name="routes-flow" value="parts" checked />
@@ -22,20 +28,26 @@
     <table id="routes-table" class="routes-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
-  <th><div class="th-content"><span>Route</span><button class="table-filter-btn" data-field="name">▼</button></div></th>
-  <th><div class="th-content"><span>Vehicle</span><button class="table-filter-btn" data-field="vehicle">▼</button></div></th>
-  <th><div class="th-content"><span>Roundtrip ID</span><button class="table-filter-btn" data-field="roundtrip_id">▼</button></div></th>
-  <th><div class="th-content"><span>Frequency</span><button class="table-filter-btn" data-field="frequency">▼</button></div></th>
-  <th><div class="th-content"><span>Base cost</span><button class="table-filter-btn" data-field="base_cost">▼</button></div></th>
-  <th><div class="th-content"><span>Stop cost</span><button class="table-filter-btn" data-field="stop_cost">▼</button></div></th>
-  <th><div class="th-content"><span>Weight utilization</span><button class="table-filter-btn" data-field="weight_utilization">▼</button></div></th>
-  <th><div class="th-content"><span>Volume utilization</span><button class="table-filter-btn" data-field="volume_utilization">▼</button></div></th>
-  <th><div class="th-content"><span>Loading meters utilization</span><button class="table-filter-btn" data-field="loading_meters_utilization">▼</button></div></th>
-  <th><div class="th-content"><span>Shippers</span><button class="table-filter-btn" data-field="shippers">▼</button></div></th>
-</tr>
+          <th style="width:36px;text-align:center;">
+            <div class="th-content center"></div>
+          </th>
+
+          <th><div class="th-content"><span>Route</span><button class="table-filter-btn" data-field="name">▼</button></div></th>
+          <th><div class="th-content"><span>Roundtrip ID</span><button class="table-filter-btn" data-field="roundtrip_id">▼</button></div></th>
+          <th><div class="th-content"><span>Frequency</span><button class="table-filter-btn" data-field="frequency">▼</button></div></th>
+          <th><div class="th-content"><span>Vehicle</span><button class="table-filter-btn" data-field="vehicle">▼</button></div></th>
+          <th><div class="th-content"><span>Base cost</span><button class="table-filter-btn" data-field="base_cost">▼</button></div></th>
+          <th><div class="th-content"><span>Stop cost</span><button class="table-filter-btn" data-field="stop_cost">▼</button></div></th>
+          <th><div class="th-content"><span>Weight</span><button class="table-filter-btn" data-field="weight">▼</button></div></th>
+          <th><div class="th-content"><span>Volume</span><button class="table-filter-btn" data-field="volume">▼</button></div></th>
+          <th><div class="th-content"><span>Loading meters</span><button class="table-filter-btn" data-field="loading_meters">▼</button></div></th>
+          <th><div class="th-content"><span>Weight util.</span><button class="table-filter-btn" data-field="weight_utilization">▼</button></div></th>
+          <th><div class="th-content"><span>Volume util.</span><button class="table-filter-btn" data-field="volume_utilization">▼</button></div></th>
+          <th><div class="th-content"><span>LM util.</span><button class="table-filter-btn" data-field="loading_meters_utilization">▼</button></div></th>
+        </tr>
       </thead>
       <tbody id="routes-tbody">
-        <tr><td colspan="9" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
+        <tr><td colspan="13" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
       </tbody>
     </table>
   </div>

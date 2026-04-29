@@ -36,16 +36,69 @@ class DirectRoute(Route):
     def get_total_cost(self, is_roundtrip: bool) -> float:
         return self.roundtrip_total_cost if is_roundtrip else self.total_cost
 
-    def summary(self, is_roundtrip: bool):
+    def _shipper_route_summary(
+            self,
+            shipper,
+            stop_order: int,
+            route_weight: float,
+            route_volume: float,
+            route_loading_meters: float,
+    ):
+        pattern = self.demand.pattern
+        demand = (
+            shipper.parts_demand
+            if pattern.flow_direction == "parts"
+            else shipper.empties_demand
+        )
+
+        allocation = pattern.shipper_allocation.get(shipper, 1)
+
+        weight = demand.weight or 0
+        volume = demand.volume or 0
+        loading_meters = demand.loading_meters or 0
+
+        allocated_weight = weight * allocation
+        allocated_volume = volume * allocation
+        allocated_loading_meters = loading_meters * allocation
+
         return {
-            "name": self.demand.pattern.route_name,
+            "cofor": shipper.cofor,
+            "stop_order": stop_order,
+            "allocation_percentage": allocation * 100,
+            "weight": weight,
+            "volume": volume,
+            "loading_meters": loading_meters,
+            "allocated_weight": allocated_weight,
+            "allocated_volume": allocated_volume,
+            "allocated_loading_meters": allocated_loading_meters,
+        }
+
+    def summary(self, is_roundtrip: bool):
+        pattern = self.demand.pattern
+        route_weight = pattern.weight or 0
+        route_volume = pattern.volume or 0
+        route_loading_meters = pattern.loading_meters or 0
+        return {
+            "name": self.route_name,
             "vehicle": self.vehicle.id,
             "base_cost": self.tariff.roundtrip_base_cost if is_roundtrip else self.tariff.base_cost,
             "stop_cost": self.tariff.stop_cost,
             "weight_utilization": self.weight_utilization,
             "volume_utilization": self.volume_utilization,
             "loading_meters_utilization": self.loading_meters_utilization,
-            "shippers": [shipper.cofor for shipper in self.demand.pattern.shippers],
+            "weight": route_weight,
+            "volume": route_volume,
+            "loading_meters": route_loading_meters,
+            "shippers": [
+                self._shipper_route_summary(
+                    shipper=shipper,
+                    stop_order=idx + 1,
+                    route_weight=route_weight,
+                    route_volume=route_volume,
+                    route_loading_meters=route_loading_meters,
+                )
+                for idx, shipper in enumerate(pattern.sequence or [])
+            ],
         }
 
     @property

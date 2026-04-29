@@ -66,7 +66,7 @@ class ProjectManager:
                 if trips:
                     route_names = [
                         (trip.parts_route if flow_direction == "parts" else trip.empties_route)
-                        .demand.pattern.route_name
+                        .demand.pattern.route_name or "Missing"
                         for trip in trips
                         if (trip.parts_route if flow_direction == "parts" else trip.empties_route)
                     ]
@@ -74,7 +74,7 @@ class ProjectManager:
                     if route_names:
                         return {
                             "type": "Direct",
-                            "name": ", ".join(sorted(set(route_names))),
+                            "name": ", ".join(sorted(str(name) for name in route_names if name is not None)),
                         }
             return {
                 "type": "N/A",

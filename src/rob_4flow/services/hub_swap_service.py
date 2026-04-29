@@ -283,7 +283,7 @@ class HubSwapService:
         empties_route = None
 
         if shipper.has_parts_demand:
-            parts_pattern = RoutePattern({shipper}, project.plant, "parts")
+            parts_pattern = RoutePattern({shipper}, project.plant, "parts", route_name=f'{shipper.cofor}#P')
             parts_pattern.order_shippers()
             parts_pattern.calculate_deviation()
 
@@ -297,7 +297,7 @@ class HubSwapService:
                 return False
 
         if add_empties and shipper.has_empties_demand:
-            empties_pattern = RoutePattern({shipper}, project.plant, "empties")
+            empties_pattern = RoutePattern({shipper}, project.plant, "empties", route_name=f'{shipper.cofor}#E')
             empties_pattern.order_shippers()
             empties_pattern.calculate_deviation()
 
