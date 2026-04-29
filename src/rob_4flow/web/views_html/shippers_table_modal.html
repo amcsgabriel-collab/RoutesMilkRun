@@ -25,17 +25,19 @@
     <table id="shippers-table" class="shippers-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Name</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">COFOR</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Weight [kg]</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Volume [m³]</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Loading Meters [m]</th>
-          <th style="text-align:center;padding:8px;border-bottom:1px solid #eee">Coordinates</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Original Network</th>
-        </tr>
+  <th><div class="th-content"><span>Name</span><button class="table-filter-btn" data-field="name">▼</button></div></th>
+  <th><div class="th-content"><span>Cofor</span><button class="table-filter-btn" data-field="cofor">▼</button></div></th>
+  <th><div class="th-content"><span>Weight</span><button class="table-filter-btn" data-field="weight">▼</button></div></th>
+  <th><div class="th-content"><span>Volume</span><button class="table-filter-btn" data-field="volume">▼</button></div></th>
+  <th><div class="th-content"><span>Loading meters</span><button class="table-filter-btn" data-field="loading_meters">▼</button></div></th>
+  <th><div class="th-content"><span>Allocation</span><button class="table-filter-btn" data-field="allocation">▼</button></div></th>
+  <th><div class="th-content"><span>Coordinates</span><button class="table-filter-btn" data-field="coordinates">▼</button></div></th>
+  <th><div class="th-content"><span>Network</span><button class="table-filter-btn" data-field="original_network">▼</button></div></th>
+</tr>
       </thead>
+      <tr></tr>
       <tbody id="shippers-tbody">
-        <tr><td colspan="7" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
+        <tr><td colspan="8" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
       </tbody>
     </table>
   </div>

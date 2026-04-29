@@ -1,81 +1,52 @@
-import { loadHtml, escapeHtml } from "../utils.js";
-import { openModal, closeModal } from "./modal.js";
-import { apiGet } from "../api.js";
+import {
+  openTableModal,
+  text,
+  formatNumber,
+  formatInteger
+} from "./table_modal.js";
 
 export async function openRoutesModal() {
-  const html = await loadHtml("../views_html/routes_table_modal.html");
-  openModal(html);
-  wireRoutesModal();
-  await loadAndRenderRoutes();
-}
+  await openTableModal({
+    htmlPath: "../views_html/routes_table_modal.html",
+    endpoint: "/api/routes",
+    tbodyId: "routes-tbody",
+    errorId: "routes-error",
+    closeId: "routes-close",
+    flowName: "routes-flow",
 
-function $id(id){ return document.getElementById(id); }
+    searchKeys: ["name", "vehicle", "roundtrip_id", "shippers"],
 
-function formatNumber(n) {
-  if (n == null) return "—";
-  const num = Number(n);
-  if (Number.isNaN(num)) return "—";
-  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+    emptyText: flow => `No ${flow} routes`,
 
-function formatInteger(n) {
-  if (n == null) return "—";
-  const num = Number(n);
-  if (Number.isNaN(num)) return "—";
-  return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-
-async function loadAndRenderRoutes() {
-  const tbody = $id("routes-tbody");
-  const err = $id("routes-error");
-  const flow = document.querySelector('input[name="routes-flow"]:checked')?.value || "parts";
-
-  err.style.display = "none";
-  tbody.innerHTML = `<tr><td colspan="9" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>`;
-
-  let list;
-  try {
-    list = await apiGet("/api/routes");
-    if (!Array.isArray(list)) list = [];
-  } catch (e) {
-    err.textContent = "Failed to load trips: " + (e.message || e);
-    err.style.display = "block";
-    tbody.innerHTML = `<tr><td colspan="9" style="padding:20px;text-align:center;color:#6b7280">Error</td></tr>`;
-    return;
-  }
-
-  const rows = list
-    .map((trip, i) => {
+    mapItem: (trip, flow) => {
       const route = flow === "empties" ? trip.empties_route : trip.parts_route;
-      if (!route) return "";
+      if (!route) return null;
 
-      return `
-        <tr class="sh-row" data-idx="${i}" data-name="${escapeHtml(route.name || "")}" style="cursor:default">
-          <td style="padding:8px;border-bottom:1px solid #f2f4f7">${escapeHtml(route.name || "")}</td>
-          <td style="padding:8px;border-bottom:1px solid #f2f4f7">${escapeHtml(route.vehicle || "")}</td>
-          <td style="padding:8px;border-bottom:1px solid #f2f4f7">${formatInteger(trip.roundtrip_id)}</td>
-          <td style="padding:8px;text-align:center;border-bottom:1px solid #f2f4f7">${formatInteger(trip.frequency)}</td>
-          <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(route.base_cost)}</td>
-          <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(route.stop_cost)}</td>
-          <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(route.weight_utilization)}</td>
-          <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(route.volume_utilization)}</td>
-          <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(route.loading_meters_utilization)}</td>
-          <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${route.shippers?.length ? route.shippers.join(", ") : "—"}</td>
-        </tr>
-      `;
-    })
-    .filter(Boolean)
-    .join("") || `<tr><td colspan="9" style="padding:20px;text-align:center;color:#6b7280">No ${flow} routes</td></tr>`;
+      return {
+        name: route.name,
+        vehicle: route.vehicle,
+        roundtrip_id: trip.roundtrip_id,
+        frequency: trip.frequency,
+        base_cost: route.base_cost,
+        stop_cost: route.stop_cost,
+        weight_utilization: route.weight_utilization,
+        volume_utilization: route.volume_utilization,
+        loading_meters_utilization: route.loading_meters_utilization,
+        shippers: route.shippers?.length ? route.shippers.join(", ") : "—"
+      };
+    },
 
-  tbody.innerHTML = rows;
-}
-
-function wireRoutesModal() {
-  document.getElementById("modal-close").addEventListener("click", closeModal);
-  document.getElementById("routes-close").addEventListener("click", closeModal);
-
-  document.querySelectorAll('input[name="routes-flow"]').forEach(el => {
-    el.addEventListener("change", () => loadAndRenderRoutes());
+    columns: [
+      { key: "name", render: r => text(r.name) },
+      { key: "vehicle", render: r => text(r.vehicle) },
+      { key: "roundtrip_id", render: r => formatInteger(r.roundtrip_id) },
+      { key: "frequency", align: "center", render: r => formatInteger(r.frequency) },
+      { key: "base_cost", align: "right", render: r => formatNumber(r.base_cost) },
+      { key: "stop_cost", align: "right", render: r => formatNumber(r.stop_cost) },
+      { key: "weight_utilization", align: "right", render: r => formatNumber(r.weight_utilization) },
+      { key: "volume_utilization", align: "right", render: r => formatNumber(r.volume_utilization) },
+      { key: "loading_meters_utilization", align: "right", render: r => formatNumber(r.loading_meters_utilization) },
+      { key: "shippers", align: "right", render: r => text(r.shippers) }
+    ]
   });
 }

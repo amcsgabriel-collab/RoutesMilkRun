@@ -1,53 +1,59 @@
 import { loadHtml, escapeHtml } from "../utils.js";
 import { openModal, closeModal } from "./modal.js";
-import { apiGet, apiPost, apiDelete } from "../api.js";
+import { apiPost, apiDelete } from "../api.js";
 
-// public export
+import {
+  openTableModal,
+  $id,
+  text,
+  formatNumber
+} from "./table_modal.js";
+
 export async function openVehiclesModal() {
-  const html = await loadHtml("../views_html/vehicles_table_modal.html");
-  openModal(html);
-  wireVehiclesModal();
-  await loadAndRenderVehicles();
-}
+  await openTableModal({
+    htmlPath: "../views_html/vehicles_table_modal.html",
+    endpoint: "/api/vehicles",
+    tbodyId: "vehicles-tbody",
+    closeId: "vehicles-close",
 
-function $id(id){ return document.getElementById(id); }
+    searchKeys: ["id"],
 
-function formatNumber(n) {
-  if (n == null) return "—";
-  const num = Number(n);
-  if (Number.isNaN(num)) return "—";
-  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+    emptyText: () => "No vehicles",
 
-async function loadAndRenderVehicles() {
-  const tbody = $id("vehicles-tbody");
-  tbody.innerHTML = `<tr><td colspan="5" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>`;
+    mapItem: v => ({
+      id: v.id,
+      weight: v.weight,
+      volume: v.volume,
+      loading_meters: v.loading_meters
+    }),
 
-  let list;
-  try {
-    list = await apiGet("/api/vehicles");
-    if (!Array.isArray(list)) list = [];
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" style="padding:20px;text-align:center;color:#6b7280">Error</td></tr>`;
-    return;
-  }
+    columns: [
+      {
+        key: "select",
+        align: "center",
+        render: r => `<input type="checkbox" class="vehicle-select" value="${escapeHtml(r.id || "")}" />`
+      },
+      { key: "id", render: r => text(r.id) },
+      { key: "weight", align: "right", render: r => formatNumber(r.weight) },
+      { key: "volume", align: "right", render: r => formatNumber(r.volume) },
+      { key: "loading_meters", align: "right", render: r => formatNumber(r.loading_meters) }
+    ],
 
-  const rows = list.map((v, i) => {
-    const id = escapeHtml(v.id || "");
-    return `
-      <tr class="sh-row" data-idx="${i}" data-name="${id}" style="cursor:default">
-        <td style="padding:8px;text-align:center;border-bottom:1px solid #f2f4f7">
-          <input type="checkbox" class="vehicle-select" value="${id}" />
-        </td>
-        <td style="padding:8px;border-bottom:1px solid #f2f4f7">${id}</td>
-        <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(v.weight)}</td>
-        <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(v.volume)}</td>
-        <td style="padding:8px;text-align:right;padding-right:12px;border-bottom:1px solid #f2f4f7">${formatNumber(v.loading_meters)}</td>
-      </tr>
-    `;
-  }).join("") || `<tr><td colspan="5" style="padding:20px;text-align:center;color:#6b7280">No vehicles</td></tr>`;
+    wireExtra: ({ loadAndRender }) => {
+      $id("vehicles-add")?.addEventListener("click", openAddVehicleModal);
 
-  tbody.innerHTML = rows;
+      $id("vehicles-delete")?.addEventListener("click", async () => {
+        await deleteSelectedVehicles();
+        await loadAndRender();
+      });
+
+      $id("vehicles-select-all")?.addEventListener("change", e => {
+        document.querySelectorAll(".vehicle-select").forEach(cb => {
+          cb.checked = e.target.checked;
+        });
+      });
+    }
+  });
 }
 
 function getSelectedVehicleIds() {
@@ -61,7 +67,6 @@ async function deleteSelectedVehicles() {
   if (!ids_to_delete.length) return;
 
   await apiDelete("/api/vehicles", ids_to_delete);
-  await loadAndRenderVehicles();
 }
 
 async function openAddVehicleModal() {
@@ -82,22 +87,8 @@ async function addVehicle() {
   await openVehiclesModal();
 }
 
-function wireVehiclesModal() {
-  document.getElementById("modal-close").addEventListener("click", closeModal);
-  document.getElementById("vehicles-close").addEventListener("click", closeModal);
-
-  document.getElementById("vehicles-add").addEventListener("click", openAddVehicleModal);
-  document.getElementById("vehicles-delete").addEventListener("click", deleteSelectedVehicles);
-
-  document.getElementById("vehicles-select-all").addEventListener("change", (e) => {
-    document.querySelectorAll(".vehicle-select").forEach(cb => {
-      cb.checked = e.target.checked;
-    });
-  });
-}
-
 function wireAddVehicleModal() {
-  document.getElementById("modal-close").addEventListener("click", closeModal);
-  document.getElementById("vehicle-add-cancel").addEventListener("click", openVehiclesModal);
-  document.getElementById("vehicle-add-save").addEventListener("click", addVehicle);
+  $id("modal-close")?.addEventListener("click", closeModal);
+  $id("vehicle-add-cancel")?.addEventListener("click", openVehiclesModal);
+  $id("vehicle-add-save")?.addEventListener("click", addVehicle);
 }

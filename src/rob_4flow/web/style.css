@@ -375,31 +375,38 @@ h1, h2 {
   min-height: 0;
 }
 
-#kpi-placeholder {
+
+
+
+#kpi-placeholder.kpi-page.compact-kpi-page {
   flex: 1;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 0;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.kpi-page.compact-kpi-page {
-  display: block;
-  width: 100%;
-  height: 100%;
   padding: 6px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: auto;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .kpi-table {
+  flex: 1 1 auto;
   width: 100%;
-  height: 100%;
+  min-height: 0;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 11px;
+  font-size: 10px;
   background: white;
 }
 
@@ -420,11 +427,15 @@ h1, h2 {
   width: 14%;
 }
 
+.kpi-table tbody tr {
+  min-height: 34px;
+}
+
 .kpi-table thead th {
   background: #f8fafc;
   font-weight: 700;
-  font-size: 11px; /* slightly bigger */
-  text-align: left; /* align titles left */
+  font-size: 11px;
+  text-align: left;
 }
 
 /* Subtotal columns (Direct Total, GRP Total) */
@@ -445,7 +456,7 @@ h1, h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -516,16 +527,44 @@ h1, h2 {
 
 
 
+.vehicles-table th,
+.shippers-table th,
+.routes-table th,
+.hubs-table th {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.th-content.center {
+  justify-content: center;
+}
+
+.table-filter-btn {
+  font-size: 10px;
+  padding: 2px 4px;
+  line-height: 1;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.table-filter-btn:hover {
+  background: #f3f4f6;
+}
 
 
 
-/* --- Shippers & routes tables modal --- */
-.shippers-table thead th { font-weight:700; background:#fafafa; }
-.shipper-table rows {font-size: 10px}
-.shippers-table tr.selected { background:#eef2ff; }
-
-.routes-table thead th { font-weight:700; background:#fafafa; }
-.routes-table rows {font-size: 10px}
 
 
 

@@ -12,15 +12,18 @@
     <table id="vehicles-table" class="vehicles-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
-          <th style="text-align:center;padding:8px;border-bottom:1px solid #eee; width:36px;">
-            <input type="checkbox" id="vehicles-select-all" />
-          </th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">ID</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Weight Capacity</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Volume Capacity</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Loading Meters Capacity</th>
-        </tr>
+  <th style="width:36px;text-align:center;">
+    <div class="th-content center">
+      <input type="checkbox" id="vehicles-select-all" />
+    </div>
+  </th>
+  <th><div class="th-content"><span>ID</span><button class="table-filter-btn" data-field="id">▼</button></div></th>
+  <th><div class="th-content"><span>Weight</span><button class="table-filter-btn" data-field="weight">▼</button></div></th>
+  <th><div class="th-content"><span>Volume</span><button class="table-filter-btn" data-field="volume">▼</button></div></th>
+  <th><div class="th-content"><span>Loading meters</span><button class="table-filter-btn" data-field="loading_meters">▼</button></div></th>
+</tr>
       </thead>
+
       <tbody id="vehicles-tbody">
         <tr><td colspan="5" style="padding:20px;text-align:center;color:#6b7280">Loading…</td></tr>
       </tbody>

@@ -1613,13 +1613,13 @@ class MilkRunSolver:
     def run_conservative_lp_pair_pruning(
         self,
         *,
-        lp_value_epsilon: float = 1e-6,
-        reduced_cost_floor: float = 20.0,
+        lp_value_epsilon: float = 1e-4,
+        reduced_cost_floor: float = 40.0,
         reduced_cost_ratio: float = 0.05,
-        keep_top_n_per_parts_route: int = 8,
-        keep_top_n_per_empties_route: int = 8,
-        keep_top_n_by_saving_per_parts_route: int = 6,
-        keep_top_n_by_saving_per_empties_route: int = 6,
+        keep_top_n_per_parts_route: int = 6,
+        keep_top_n_per_empties_route: int = 6,
+        keep_top_n_by_saving_per_parts_route: int = 5,
+        keep_top_n_by_saving_per_empties_route: int = 5,
         solver=None,
     ) -> None:
         """
