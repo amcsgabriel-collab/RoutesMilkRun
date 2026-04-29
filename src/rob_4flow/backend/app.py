@@ -357,10 +357,7 @@ def create_app():
 
     @app.get("/api/shippers")
     def api_shippers():
-        shippers_summaries = [shipper.summary for shipper in pm.current_scenario.direct_shippers.values()]
-        hub_shippers_summary = [shipper.summary for shipper in pm.current_scenario.hub_shippers.values()]
-        return success(shippers_summaries + hub_shippers_summary)
-
+        return success(pm.get_shippers_summary())
 
     @app.get("/api/routes")
     def api_routes():

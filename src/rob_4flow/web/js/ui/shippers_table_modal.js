@@ -29,7 +29,8 @@ export async function openShippersModal() {
         weight: demand?.weight,
         volume: demand?.volume,
         loading_meters: demand?.loading_meters,
-        allocation: s.allocation,
+        allocation_name: s.allocation?.[flow]?.name,
+        allocation_type: s.allocation?.[flow]?.type,
         coordinates: s.coordinates,
         original_network: s.original_network
       };
@@ -41,7 +42,8 @@ export async function openShippersModal() {
       { key: "weight", align: "right", render: r => formatNumber(r.weight) },
       { key: "volume", align: "right", render: r => formatNumber(r.volume) },
       { key: "loading_meters", align: "right", render: r => formatNumber(r.loading_meters) },
-      { key: "allocation", render: r => text(r.allocation) },
+      { key: "allocation_name", render: r => text(r.allocation_name) },
+      { key: "allocation_type", render: r => text(r.allocation_type) },
       { key: "coordinates", align: "center", render: r => formatCoordinates(r.coordinates) },
       { key: "original_network", render: r => text(r.original_network) }
     ]

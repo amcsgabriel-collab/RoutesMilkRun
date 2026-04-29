@@ -9,6 +9,7 @@ from .map_generator import generate_scenario_map_html
 from .project_service import ProjectService
 from .scenario_service import ScenarioService
 from .solver import Solver
+from ..domain.shipper import Shipper
 
 LogFn = Callable[[str], None]
 
@@ -50,6 +51,47 @@ class ProjectManager:
 
     def delete_scenario(self, scenario_name):
         self.scenario_service.delete_scenario(self.project, scenario_name)
+
+    # SHIPPER TABLE DATA
+    def get_shippers_summary(self):
+        def allocation_summary(shipper: Shipper, flow_direction: str):
+            try:
+                hub = self.current_scenario.find_shipper_hub(shipper)
+                return {
+                    "type": "Hub",
+                    "name": hub.cofor,
+                }
+            except KeyError:
+                trips = self.current_scenario.find_shipper_trips(shipper, flow_direction)
+                if trips:
+                    trip = trips[0]
+                    route = trip.parts_route if flow_direction == "parts" else trip.empties_route
+                    if route:
+                        return {
+                            "type": "Direct",
+                            "name": route.demand.pattern.route_name,
+                        }
+            return {
+                "type": "N/A",
+                "name": "Not allocated",
+            }
+
+        shippers = (
+                self.current_region.scenarios["AS-IS"].direct_shippers
+                | self.current_region.scenarios["AS-IS"].hub_shippers
+        ).values()
+
+        return [
+            {
+                **shipper.summary,
+                "allocation": {
+                    "parts": allocation_summary(shipper, "parts"),
+                    "empties": allocation_summary(shipper, "empties"),
+                },
+            }
+            for shipper in shippers
+        ]
+
 
     # ROUTE LOCKING & BLOCKING INTERFACE
     def get_lock_block_available_routes(self):
