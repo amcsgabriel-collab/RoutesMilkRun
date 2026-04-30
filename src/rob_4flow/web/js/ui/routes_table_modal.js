@@ -38,6 +38,7 @@ export async function openRoutesModal() {
     weight: route.weight,
     volume: route.volume,
     loading_meters: route.loading_meters,
+    transport_concept: route.transport_concept,
 
     // useful for top/global filtering
     shippers_search: route.shippers?.map(s => s.name || s.cofor || s).join(" ") || "",
@@ -72,7 +73,8 @@ export async function openRoutesModal() {
   { key: "loading_meters", align: "right", render: r => formatNumber(r.loading_meters) },
   { key: "weight_utilization", align: "right", render: r => formatNumber(r.weight_utilization) },
   { key: "volume_utilization", align: "right", render: r => formatNumber(r.volume_utilization) },
-  { key: "loading_meters_utilization", align: "right", render: r => formatNumber(r.loading_meters_utilization) }
+  { key: "loading_meters_utilization", align: "right", render: r => formatNumber(r.loading_meters_utilization) },
+  { key: "transport_concept", align: "right", render: r => text(r.transport_concept) }
 
 ],
 

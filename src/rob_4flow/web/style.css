@@ -526,6 +526,17 @@ h1, h2 {
 
 
 
+.vehicles-table,
+.shippers-table,
+.routes-table,
+.hubs-table {
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  }
+
+
 
 .vehicles-table th,
 .shippers-table th,

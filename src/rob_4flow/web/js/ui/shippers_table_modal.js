@@ -44,8 +44,8 @@ export async function openShippersModal() {
       { key: "loading_meters", align: "right", render: r => formatNumber(r.loading_meters) },
       { key: "allocation_name", render: r => text(r.allocation_name) },
       { key: "allocation_type", render: r => text(r.allocation_type) },
-      { key: "coordinates", align: "center", render: r => formatCoordinates(r.coordinates) },
-      { key: "original_network", render: r => text(r.original_network) }
+      { key: "original_network", render: r => text(r.original_network) },
+      { key: "coordinates", align: "center", render: r => formatCoordinates(r.coordinates) }
     ]
   });
 }

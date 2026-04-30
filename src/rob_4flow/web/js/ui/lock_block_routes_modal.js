@@ -65,11 +65,31 @@ function routeIdToKey(id) {
 }
 
 function formatRouteLabel(route) {
-  const shippers = (route.sequence || []).slice().sort().join(", ");
-  const freq = route.frequency ?? "—";
-  const util = route.utilization;
-  const direction = route.flow_direction
-  return `${shippers} | ${direction} | Freq: ${freq} | Util: ${util}`;
+  const name = route.route_name || route.name || "";
+  const shippers = (route.sequence || []).slice().join(", ");
+  const direction = route.flow_direction;
+  return `${name} - ${shippers} | ${direction}`;
+}
+
+function normalizeFlow(flow) {
+  return String(flow || "").toLowerCase();
+}
+
+function getRouteSortName(route) {
+  return String(route.route_name || route.name || "").trim().toLowerCase();
+}
+
+function sortRoutes(routes) {
+  const flowOrder = { parts: 0, empties: 1 };
+
+  return [...routes].sort((a, b) => {
+    const flowA = flowOrder[normalizeFlow(a.flow_direction)] ?? 99;
+    const flowB = flowOrder[normalizeFlow(b.flow_direction)] ?? 99;
+
+    if (flowA !== flowB) return flowA - flowB;
+
+    return getRouteSortName(a).localeCompare(getRouteSortName(b));
+  });
 }
 
 // Retrieving data and rendering the lists of routes (left and right) according to mode.
@@ -85,8 +105,8 @@ async function refreshRoutesLists(mode) {
     return;
   }
 
-  const current = Array.isArray(data?.current_routes) ? data.current_routes : [];
-  const target = Array.isArray(data?.target_routes) ? data.target_routes : [];
+    const current = sortRoutes(Array.isArray(data?.current_routes) ? data.current_routes : []);
+    const target = sortRoutes(Array.isArray(data?.target_routes) ? data.target_routes : []);
 
   // render left
   left.innerHTML = "";

@@ -79,7 +79,8 @@ class DirectRoute(Route):
         route_volume = pattern.volume or 0
         route_loading_meters = pattern.loading_meters or 0
         return {
-            "name": self.route_name,
+            "name": self.demand.pattern.route_name,
+            "transport_concept": self.demand.pattern.transport_concept,
             "vehicle": self.vehicle.id,
             "base_cost": self.tariff.roundtrip_base_cost if is_roundtrip else self.tariff.base_cost,
             "stop_cost": self.tariff.stop_cost,
@@ -105,11 +106,10 @@ class DirectRoute(Route):
     def shippers_keyed_summary(self):
         sequence = [s.cofor for s in self.demand.pattern.sequence]
         return {
+            "route_name": self.demand.pattern.route_name,
             "key": "|".join(sequence),
             "flow_direction": self.demand.flow_direction,
             "sequence": sequence,
-            "frequency": self.frequency,
-            "utilization": f"{self.max_utilization:.2f}%",
         }
 
     def generate_route_name(self):
