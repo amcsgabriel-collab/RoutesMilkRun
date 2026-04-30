@@ -61,12 +61,14 @@ class HubSwapService:
                 shippers_without_hub.append(shipper.short_summary)
                 continue
 
-            self.move_direct_shipper_to_hub(project, shipper, assigned_hub)
+            ok = self.move_direct_shipper_to_hub(project, shipper, assigned_hub)
+            if not ok:
+                shippers_without_hub.append(shipper.short_summary)
         self._normalize_direct_shipper_allocations(scenario)
 
         return shippers_without_hub
 
-    def move_direct_shipper_to_hub(self, project: Project, shipper: Shipper, hub: Hub) -> None:
+    def move_direct_shipper_to_hub(self, project: Project, shipper: Shipper, hub: Hub) -> bool:
         """
         Moves shipper from direct network to assigned Hub.
         :param project: Current Project.
@@ -77,7 +79,11 @@ class HubSwapService:
         move_empties = hub.has_empties_flow and shipper.has_empties_demand
 
         if not move_parts and not move_empties:
-            return
+            return False
+
+        ok = self._add_shipper_to_hub(project, shipper, hub)
+        if not ok:
+            return False
 
         self._remove_shipper_from_direct_network(
             project,
@@ -85,7 +91,41 @@ class HubSwapService:
             remove_parts=move_parts,
             remove_empties=move_empties,
         )
-        self._add_shipper_to_hub(project, shipper, hub)
+
+        return True
+
+    @staticmethod
+    def _can_add_shipper_to_hub(project: Project, shipper: Shipper, hub) -> bool:
+        core_hub = getattr(hub, "core_hub", hub)
+
+        if shipper.has_parts_demand:
+            route = FirstLegRoute(
+                shipper=shipper,
+                carrier=core_hub.first_leg_carrier,
+                vehicle=core_hub.first_leg_vehicle,
+                hub=core_hub,
+                flow_direction="parts",
+            )
+            project.context.tariffs_service.assign_ltl_route(route)
+
+            if route.tariff_source == "Missing":
+                return False
+
+        if core_hub.has_empties_flow and shipper.has_empties_demand:
+            route = FirstLegRoute(
+                shipper=shipper,
+                carrier=core_hub.first_leg_carrier,
+                vehicle=core_hub.first_leg_vehicle,
+                hub=core_hub,
+                flow_direction="empties",
+            )
+            project.context.tariffs_service.assign_ltl_route(route)
+
+            if route.tariff_source == "Missing":
+                return False
+
+        return True
+
 
     @staticmethod
     def _remove_shipper_from_direct_network(
@@ -199,8 +239,8 @@ class HubSwapService:
         """
         core_hub = getattr(hub, "core_hub", hub)
 
-        if shipper not in core_hub.shippers:
-            core_hub.shippers.append(shipper)
+        new_parts_first_leg = None
+        new_empties_first_leg = None
 
         if shipper.has_parts_demand:
             new_parts_first_leg = FirstLegRoute(
@@ -211,7 +251,9 @@ class HubSwapService:
                 flow_direction="parts",
             )
             project.context.tariffs_service.assign_ltl_route(new_parts_first_leg)
-            core_hub.parts_first_leg_routes.add(new_parts_first_leg)
+
+            if new_parts_first_leg.tariff_source == "Missing":
+                return False
 
         if core_hub.has_empties_flow and shipper.has_empties_demand:
             new_empties_first_leg = FirstLegRoute(
@@ -222,7 +264,20 @@ class HubSwapService:
                 flow_direction="empties",
             )
             project.context.tariffs_service.assign_ltl_route(new_empties_first_leg)
+
+            if new_empties_first_leg.tariff_source == "Missing":
+                return False
+
+        if shipper not in core_hub.shippers:
+            core_hub.shippers.append(shipper)
+
+        if new_parts_first_leg is not None:
+            core_hub.parts_first_leg_routes.add(new_parts_first_leg)
+
+        if new_empties_first_leg is not None:
             core_hub.empties_first_leg_routes.add(new_empties_first_leg)
+
+        return True
 
     def move_hub_shippers_to_direct(self, project: Project, cofors: list[str]) -> list[str]:
         """

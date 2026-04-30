@@ -35,7 +35,7 @@ let swapState = {
  */
 export async function openSwapModal() {
   const html = await loadHtml("../views_html/swap_hub_direct.html");
-  openModal(html);
+  openModal(html, "modal-large");
   wireSwapModal();
   wireInputCheckbox();
 }

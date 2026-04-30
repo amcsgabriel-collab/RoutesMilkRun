@@ -36,6 +36,27 @@ class TripRepository:
             | (self._df["Roundtrip identifier"].astype(str).str.strip() == "")
         ]
 
+        route_roundtrip_ids = (
+            roundtrip_rows
+            .assign(
+                route_name=roundtrip_rows["Route name"].astype(str).str.strip(),
+                roundtrip_id=roundtrip_rows["Roundtrip identifier"].astype(str).str.strip(),
+            )
+            .groupby("route_name")["roundtrip_id"]
+            .nunique()
+        )
+
+        routes_with_multiple_roundtrip_ids = route_roundtrip_ids[route_roundtrip_ids > 1]
+
+        if not routes_with_multiple_roundtrip_ids.empty:
+            raise ValueError(
+                "Invalid roundtrip IDs (same route assigned to multiple roundtrip IDs):\n"
+                + "\n".join(
+                    f"{route_name}: {count} roundtrip IDs"
+                    for route_name, count in routes_with_multiple_roundtrip_ids.items()
+                )
+            )
+
         roundtrip_map: dict[str, dict[str, set[str]]] = {}
 
         for _, row in roundtrip_rows.iterrows():

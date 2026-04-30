@@ -48,7 +48,7 @@ export function formatCoordinates(coords) {
 
 export async function openTableModal(config) {
   const html = await loadHtml(config.htmlPath);
-  openModal(html);
+  openModal(html, "modal-large");
 
   const state = {
   list: [],
@@ -91,10 +91,13 @@ export async function openTableModal(config) {
         });
 
         tbody.innerHTML = visibleRows.length
-          ? visibleRows.map((row, i) =>
-              renderRow(row, i, config.columns, config, state)
-            ).join("")
-          : tableMessage(config.columns.length, config.emptyText?.(flow) || "No rows");
+  ? [
+      ...visibleRows.map((row, i) =>
+        renderRow(row, i, config.columns, config, state)
+      ),
+      config.totalRow ? renderRow(config.totalRow(visibleRows), "total", config.columns, config, state) : ""
+    ].join("")
+  : tableMessage(config.columns.length, config.emptyText?.(flow) || "No rows");
 
       tbody.querySelectorAll(".table-expand-btn").forEach(btn => {
       btn.addEventListener("click", e => {
@@ -128,7 +131,7 @@ function renderRow(row, i, columns, config = {}, state = {}) {
   row._rowId = row._rowId ?? `row-${i}`;
 
   const mainRow = `
-    <tr class="sh-row" data-row-id="${row._rowId}" style="cursor:default">
+    <tr class="sh-row" data-row-id="${row._rowId}" style="${row._rowId === "total-row" ? "font-weight:700;background:#f8fafc" : "cursor:default"}">
       ${columns.map(col => `
         <td style="${cellStyle(col)}">
           ${col.render ? col.render(row) : text(row[col.key])}

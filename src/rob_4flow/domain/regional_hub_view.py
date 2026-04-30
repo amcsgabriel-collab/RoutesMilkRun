@@ -177,17 +177,6 @@ class RegionalHubView:
         regional = sum(s.empties_demand.weight for s in self.empties_shippers)
         return _safe_div(regional, total)
 
-    @staticmethod
-    def _allocated_route_kpis(route, share: float) -> KPISet:
-        return KPISet(
-            total_cost=route.total_cost * share,
-            trucks=route.frequency * share,
-            utilization_numerator=route.max_utilization * route.frequency * share,
-            weight=route.weight * share,
-            volume=route.volume * share,
-            loading_meters=route.loading_meters * share,
-        )
-
     @property
     def hub_parts_first_leg_kpis(self) -> KPISet:
         return KPISet(
@@ -208,15 +197,40 @@ class RegionalHubView:
 
     @property
     def hub_parts_linehaul_kpis(self) -> KPISet:
-        share = self._parts_linehaul_share()
-        return self._allocated_route_kpis(self.parts_linehaul_route, share)
+        cost_share = self._parts_linehaul_share()
+
+        return KPISet(
+            total_cost=self.parts_linehaul_route.total_cost * cost_share,
+            trucks=self.parts_linehaul_route.frequency * cost_share,
+            utilization_numerator=(
+                    self.parts_linehaul_route.max_utilization
+                    * self.parts_linehaul_route.frequency
+                    * cost_share
+            ),
+            weight=sum(s.parts_demand.weight for s in self.parts_shippers),
+            volume=sum(s.parts_demand.volume for s in self.parts_shippers),
+            loading_meters=sum(s.parts_demand.loading_meters for s in self.parts_shippers),
+        )
 
     @property
     def hub_empties_linehaul_kpis(self) -> KPISet:
         if not self.has_empties_flow:
             return KPISet()
-        share = self._empties_linehaul_share()
-        return self._allocated_route_kpis(self.empties_linehaul_route, share)
+
+        cost_share = self._empties_linehaul_share()
+
+        return KPISet(
+            total_cost=self.empties_linehaul_route.total_cost * cost_share,
+            trucks=self.empties_linehaul_route.frequency * cost_share,
+            utilization_numerator=(
+                    self.empties_linehaul_route.max_utilization
+                    * self.empties_linehaul_route.frequency
+                    * cost_share
+            ),
+            weight=sum(s.empties_demand.weight for s in self.empties_shippers),
+            volume=sum(s.empties_demand.volume for s in self.empties_shippers),
+            loading_meters=sum(s.empties_demand.loading_meters for s in self.empties_shippers),
+        )
 
     @property
     def hub_all_linehaul_kpis(self) -> KPISet:

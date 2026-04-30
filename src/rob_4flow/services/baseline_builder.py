@@ -104,6 +104,78 @@ def verify_total_volume(route_patterns: list["RoutePattern"], shippers: list["Sh
                         f"  Route: {pattern.route_name} | Flow: {pattern.flow_direction} | Allocation: {share:.6f}"
                     )
 
+def verify_direct_trips_match_dataframe(
+    trips: set[Trip],
+    direct_demand_database: pd.DataFrame,
+) -> None:
+    expected_by_route = defaultdict(lambda: {
+        "weight": 0.0,
+        "volume": 0.0,
+        "loading_meters": 0.0,
+        "shippers": set(),
+    })
+
+    for _, row in direct_demand_database.iterrows():
+        route_name = row["Route name"]
+
+        expected_by_route[route_name]["weight"] += float(row["Avg. Weight / week"] or 0.0)
+        expected_by_route[route_name]["volume"] += float(row["Avg. Volume / week"] or 0.0)
+        expected_by_route[route_name]["loading_meters"] += float(
+            row["Avg. Loading Meters / week"] or 0.0
+        )
+        expected_by_route[route_name]["shippers"].add(row["Shipper COFOR"])
+
+    routes_by_name = {}
+
+    for trip in trips:
+        for route in (trip.parts_route, trip.empties_route):
+            if route is not None:
+                routes_by_name[route.route_name] = route
+
+    missing_routes = sorted(set(expected_by_route) - set(routes_by_name))
+    if missing_routes:
+        print("\n❌ Direct routes missing from final trips:")
+        for route_name in missing_routes:
+            print(f"  {route_name}")
+
+    allocation_by_shipper_and_flow = defaultdict(float)
+
+    for route in routes_by_name.values():
+        flow_direction = route.demand.flow_direction
+
+        for shipper, allocation in route.demand.pattern.shipper_allocation.items():
+            cofor = shipper.cofor if hasattr(shipper, "cofor") else shipper
+            allocation_by_shipper_and_flow[(cofor, flow_direction)] += float(allocation or 0.0)
+
+
+    for route_name, expected in expected_by_route.items():
+        route = routes_by_name.get(route_name)
+        if route is None:
+            continue
+
+        demand = route.demand
+
+        actuals = {
+            "weight": demand.weight,
+            "volume": demand.volume,
+            "loading_meters": demand.loading_meters,
+        }
+
+        for variable, actual in actuals.items():
+            expected_value = expected[variable]
+            if abs(float(actual or 0.0) - expected_value) > 1e-6:
+                print(f"\n❌ Demand mismatch for route {route_name} / {variable}")
+                print(f"Expected: {expected_value:.6f}")
+                print(f"Actual:   {float(actual or 0.0):.6f}")
+
+        flow_direction = route.demand.flow_direction
+        for shipper in expected["shippers"]:
+            total_allocation = allocation_by_shipper_and_flow[(shipper, flow_direction)]
+
+            if abs(total_allocation - 1.0) > 1e-6:
+                print(f"\n❌ Allocation error for shipper {shipper} / flow {flow_direction}")
+                print(f"Total allocation across final direct routes: {total_allocation:.6f}")
+
 
 def validate_ftl_missing_tariffs(routes: set[DirectRoute]) -> None:
     missing = [
@@ -457,6 +529,11 @@ class BaselineBuilder:
         ).get_all(
             parts_routes=parts_routes,
             empties_routes=empties_routes,
+        )
+
+        verify_direct_trips_match_dataframe(
+            trips=trips,
+            direct_demand_database=self.direct_demand_database,
         )
 
         return trips

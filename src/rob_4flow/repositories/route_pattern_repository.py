@@ -35,14 +35,26 @@ class RoutePatternRepository:
                 flow_direction="parts" if flow_direction == "P" else "empties",
             )
 
-            shipper_route_freq = (
+            shipper_route_weight = (
                 self._df[self._df["Parts or Empties"] == flow_direction]
-                .groupby(['Shipper COFOR', 'Route name'])['Frequency / week']
+                .groupby(["Shipper COFOR", "Route name"])["Avg. Weight / week"]
                 .sum()
             )
-            shipper_share_freq = shipper_route_freq / shipper_route_freq.groupby(level=0).sum()
+
+            shipper_total_weight = shipper_route_weight.groupby(level=0).sum()
+
             for shipper in shippers:
-                pattern.shipper_allocation[shipper] = shipper_share_freq.get((shipper.cofor, pattern.route_name), 0)
+                route_weight = shipper_route_weight.get(
+                    (shipper.cofor, pattern.route_name),
+                    0.0,
+                )
+                total_weight = shipper_total_weight.get(shipper.cofor, 0.0)
+
+                pattern.shipper_allocation[shipper] = (
+                    float(route_weight) / float(total_weight)
+                    if total_weight
+                    else 0.0
+                )
 
             pattern.order_shippers(self._distance_function)
             pattern.calculate_deviation(self._distance_function)

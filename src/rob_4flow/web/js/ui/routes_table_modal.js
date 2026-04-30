@@ -44,13 +44,18 @@ export async function openRoutesModal() {
     shippers_search: route.shippers?.map(s => s.name || s.cofor || s).join(" ") || "",
 
     children: (route.shippers || []).map((s, idx) => ({
-      shipper_cofor: s.cofor,
-      weight: s.weight,
-      volume: s.volume,
-      loading_meters: s.loading_meters,
-      allocation_percentage: s.allocation_percentage,
-      stop_order: s.stop_order ?? idx + 1
-    }))
+  shipper_cofor: s.cofor,
+  weight: s.weight,
+  volume: s.volume,
+  loading_meters: s.loading_meters,
+
+  allocated_weight: s.allocated_weight,
+  allocated_volume: s.allocated_volume,
+  allocated_loading_meters: s.allocated_loading_meters,
+
+  allocation_percentage: s.allocation_percentage,
+  stop_order: s.stop_order ?? idx + 1
+}))
   };
 },
 
@@ -90,11 +95,33 @@ childColumns: [
 childRender: {
   _expand: r => formatInteger(r.stop_order),
   name: r => text(r.shipper_cofor),
-  roundtrip_id: r => `${formatNumber(r.allocation_percentage)}%`,
-  weight: r => formatNumber(r.weight),
-  volume: r => formatNumber(r.volume),
-  loading_meters: r => formatNumber(r.loading_meters)
-}
 
-  });
-}
+  stop_cost: r => `${formatNumber(r.allocation_percentage)}%`,
+  weight: r => stackedDemand(r.weight, r.allocated_weight),
+  volume: r => stackedDemand(r.volume, r.allocated_volume),
+  loading_meters: r => stackedDemand(r.loading_meters, r.allocated_loading_meters)
+},
+
+
+
+  totalRow: rows => ({
+  _rowId: "total-row",
+  name: "Total",
+  weight: rows.reduce((sum, r) => sum + Number(r.weight || 0), 0),
+  volume: rows.reduce((sum, r) => sum + Number(r.volume || 0), 0),
+  loading_meters: rows.reduce((sum, r) => sum + Number(r.loading_meters || 0), 0)
+}),
+
+  })};
+
+
+function stackedDemand(allocated, total) {
+  return `
+    <div style="line-height:1.25;text-align:right">
+      <div title="Allocated">${formatNumber(allocated)}</div>
+      <div title="Total demand" style="color:#6b7280;font-size:12px;border-top:1px solid #e5e7eb;margin-top:2px;padding-top:2px">
+        ${formatNumber(total)}
+      </div>
+    </div>
+  `;
+};
