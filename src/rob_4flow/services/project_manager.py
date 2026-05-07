@@ -52,6 +52,10 @@ class ProjectManager:
     def delete_scenario(self, scenario_name):
         self.scenario_service.delete_scenario(self.project, scenario_name)
 
+    def discard_scenario_draft(self, scenario_name):
+        self.scenario_service.discard_draft(self.project, scenario_name)
+
+
     # SHIPPER TABLE DATA
     def get_shippers_summary(self):
         def allocation_summary(shipper: Shipper, flow_direction: str):

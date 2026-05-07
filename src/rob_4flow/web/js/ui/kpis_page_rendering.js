@@ -40,8 +40,8 @@ function formatKg(value) {
     return `${formatDecimal(value, 0)} kg`;
 }
 
-function formatM3(value) {
-    return `${formatDecimal(value, 1)} m³`;
+function formatM3(value, digits = 1) {
+    return `${formatDecimal(value, digits)} m³`;
 }
 
 function formatLm(value) {
@@ -82,6 +82,8 @@ function formatKpiValue(value, formatType) {
             return formatKg(value);
         case 'm3':
             return formatM3(value);
+        case 'm32':
+            return formatM3(value, 2);
         case 'lm':
             return formatLm(value);
 
@@ -98,7 +100,7 @@ function formatKpiValue(value, formatType) {
         case 'delta-kg':
             return formatSigned(value, v => `${formatDecimal(v, 0)} kg`);
         case 'delta-m3':
-            return formatSigned(value, v => `${formatDecimal(v, 1)} m³`);
+            return formatSigned(value, v => `${formatDecimal(v, 2)} m³`);
         case 'delta-lm':
             return formatSigned(value, v => `${formatDecimal(v, 1)} lm`);
 

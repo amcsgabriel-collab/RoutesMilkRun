@@ -345,6 +345,12 @@ def create_app():
         pm.current_scenario.save()
         return success()
 
+    @app.delete("/api/scenario/draft")
+    @json_endpoint
+    @with_pm_lock
+    def api_scenario_draft_discard(data):
+        pm.discard_scenario_draft(data.get("name"))
+        return success()
 
     @app.get("/api/scenario/kpis")
     @with_pm_lock

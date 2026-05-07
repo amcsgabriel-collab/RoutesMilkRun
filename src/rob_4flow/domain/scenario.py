@@ -3,8 +3,6 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterable, Callable, TypeVar
 
-import pandas as pd
-
 from .general_algorithms import utc_now_iso
 from .hub import Hub
 from .kpi_set import KPISet
@@ -22,6 +20,15 @@ def _sum(items: Iterable[T], fn: Callable[[T], float]) -> float:
 def _safe_div(numerator: float, denominator: float) -> float:
     return numerator / denominator if denominator else 0.0
 
+def with_vehicles(fn):
+    def wrapper(self):
+        kpis = fn(self)
+        result = copy.copy(kpis)
+        result.vehicles = self.kpi_vehicles
+        return result
+
+    return property(wrapper)
+
 
 @dataclass
 class Scenario:
@@ -33,15 +40,16 @@ class Scenario:
     name: str
 
     hubs: set[HubLike] = field(default_factory=set)
-    draft_hubs: set[HubLike] = field(default_factory=set)
+    draft_hubs: set[HubLike] | None = None
 
     trips: set[Trip] = field(default_factory=set)
-    draft_trips: set[Trip] = field(default_factory=set)
+    draft_trips: set[Trip] | None = None
     lock_block_available_routes: list[DirectRoute] = field(default_factory=list)
     blocked_routes: list[DirectRoute] = field(default_factory=list)
     locked_routes: list[DirectRoute] = field(default_factory=list)
 
     is_baseline: bool = field(default=False)
+    kpi_vehicles: int = 0
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
 
@@ -315,39 +323,39 @@ class Scenario:
             loading_meters=loading_meters,
         )
 
-    @property
+    @with_vehicles
     def ftl_parts_kpis(self):
         return self._get_direct_kpis(flow_direction="parts", concept="FTL")
 
-    @property
+    @with_vehicles
     def ftl_empties_kpis(self):
         return self._get_direct_kpis(flow_direction="empties", concept="FTL")
 
-    @property
+    @with_vehicles
     def ftl_all_kpis(self):
         return self._get_direct_kpis(concept="FTL")
 
-    @property
+    @with_vehicles
     def mr_parts_kpis(self):
         return self._get_direct_kpis(flow_direction="parts", concept="MR")
 
-    @property
+    @with_vehicles
     def mr_empties_kpis(self):
         return self._get_direct_kpis(flow_direction="empties", concept="MR")
 
-    @property
+    @with_vehicles
     def mr_all_kpis(self):
         return self._get_direct_kpis(concept="MR")
 
-    @property
+    @with_vehicles
     def direct_parts_kpis(self):
         return self._get_direct_kpis(flow_direction="parts")
 
-    @property
+    @with_vehicles
     def direct_empties_kpis(self):
         return self._get_direct_kpis(flow_direction="empties")
 
-    @property
+    @with_vehicles
     def direct_all_kpis(self):
         return self._get_direct_kpis()
 
@@ -358,51 +366,51 @@ class Scenario:
             result += getattr(hub, attr_name)
         return result
 
-    @property
+    @with_vehicles
     def hub_parts_first_leg_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_parts_first_leg_kpis")
 
-    @property
+    @with_vehicles
     def hub_empties_first_leg_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_empties_first_leg_kpis")
 
-    @property
+    @with_vehicles
     def hub_all_first_leg_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_all_first_leg_kpis")
 
-    @property
+    @with_vehicles
     def hub_parts_linehaul_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_parts_linehaul_kpis")
 
-    @property
+    @with_vehicles
     def hub_empties_linehaul_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_empties_linehaul_kpis")
 
-    @property
+    @with_vehicles
     def hub_all_linehaul_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_all_linehaul_kpis")
 
-    @property
+    @with_vehicles
     def hub_parts_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_parts_kpis")
 
-    @property
+    @with_vehicles
     def hub_empties_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_empties_kpis")
 
-    @property
+    @with_vehicles
     def hub_all_kpis(self):
         return self._sum_hub_kpis(self.get_in_use_hubs(), "hub_all_kpis")
 
-    @property
+    @with_vehicles
     def global_parts_kpis(self):
         return self.direct_parts_kpis + self.hub_parts_kpis
 
-    @property
+    @with_vehicles
     def global_empties_kpis(self):
         return self.direct_empties_kpis + self.hub_empties_kpis
 
-    @property
+    @with_vehicles
     def global_total_kpis(self):
         return self.direct_all_kpis + self.hub_all_kpis
 
@@ -420,28 +428,25 @@ class Scenario:
     def summary(self):
         return {
             "name": self.name,
+            "has_draft": self.draft_trips is not None or self.draft_hubs is not None,
             "total_cost": self._json_number(self.global_total_kpis.total_cost),
             "trucks": self._json_number(self.global_total_kpis.trucks),
             "utilization": self._json_number(self.global_total_kpis.utilization),
         }
 
-    def export_trips_debug(self):
-        trip_id_number = 0
-        frames = []
-        for trip in self.get_in_use_trips():
-            trip_id_number += 1
-            frames.append(trip.export_table(trip_id_number))
-
-        debug = pd.concat(frames, ignore_index=True)
-        debug.to_csv('debug_trips.csv', sep=';', decimal=',', index=False)
-
-
     def save(self):
-        self.export_trips_debug()
         if self.is_baseline:
             raise ValueError("Cannot replace baseline routes.")
         if self.draft_trips:
             self.trips = self.draft_trips
-            self.draft_trips = set()
+            self.draft_trips = None
+        if self.draft_hubs:
+            self.hubs = self.draft_hubs
+            self.draft_hubs = None
+
+    def discard_draft(self):
+        self.draft_trips = None
+        self.draft_hubs = None
+
 
 

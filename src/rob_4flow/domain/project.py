@@ -80,6 +80,10 @@ class Project:
         return self.context.plant
 
     @property
+    def vehicles_count(self):
+        return self.current_scenario.kpi_vehicles
+
+    @property
     def summary(self):
         return {
             "meta": {
@@ -88,7 +92,8 @@ class Project:
                 "current_scenario": self.current_scenario.name,
             },
             "context": {
-                "plant_name": self.plant.name
+                "plant_name": self.plant.name,
+                "vehicles_count": self.vehicles_count
             }
         }
 

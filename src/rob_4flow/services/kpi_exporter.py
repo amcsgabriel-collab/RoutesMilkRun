@@ -20,16 +20,23 @@ class KpiExporter:
             **self.kpi(group_attr, "total_cost", "total_cost", "lower"),
             **self.kpi(group_attr, "trucks", "total_trucks", "lower"),
             **self.kpi(group_attr, "utilization", "overall_utilization", "higher"),
-            **self.kpi(group_attr, "euro_per_truck", "eur_per_truck", "lower"),
+            **self.kpi(group_attr, "euro_per_vehicle", "euro_per_vehicle", "lower"),
             **self.kpi(group_attr, "weight", "total_weight", "neutral"),
             **self.kpi(group_attr, "volume", "total_volume", "neutral"),
             **self.kpi(group_attr, "loading_meters", "total_loading_meters", "neutral"),
-            **self.kpi(group_attr, "volume_per_truck", "volume_per_truck", "lower"),
+            **self.kpi(group_attr, "volume_per_vehicle", "volume_per_vehicle", "lower"),
+            **self.kpi(group_attr, "euro_per_volume", "euro_per_volume", "lower"),
         }
 
-    def cost_only_kpi_block(self, group_attr: str):
+    def first_leg_kpi_block(self, group_attr: str):
         return {
             **self.kpi(group_attr, "total_cost", "total_cost", "lower"),
+            **self.kpi(group_attr, "weight", "total_weight", "neutral"),
+            **self.kpi(group_attr, "volume", "total_volume", "neutral"),
+            **self.kpi(group_attr, "loading_meters", "total_loading_meters", "neutral"),
+            **self.kpi(group_attr, "euro_per_vehicle", "euro_per_vehicle", "lower"),
+            **self.kpi(group_attr, "euro_per_volume", "euro_per_volume", "lower"),
+            **self.kpi(group_attr, "volume_per_vehicle", "volume_per_vehicle", "lower"),
         }
 
     def get_kpis_template(self):
@@ -53,9 +60,9 @@ class KpiExporter:
             },
             "grp": {
                 "first_leg": {
-                    "parts": self.cost_only_kpi_block("hub_parts_first_leg_kpis"),
-                    "empties": self.cost_only_kpi_block("hub_empties_first_leg_kpis"),
-                    "all": self.cost_only_kpi_block("hub_all_first_leg_kpis"),
+                    "parts": self.first_leg_kpi_block("hub_parts_first_leg_kpis"),
+                    "empties": self.first_leg_kpi_block("hub_empties_first_leg_kpis"),
+                    "all": self.first_leg_kpi_block("hub_all_first_leg_kpis"),
                 },
                 "linehaul": {
                     "parts": self.kpi_block("hub_parts_linehaul_kpis"),

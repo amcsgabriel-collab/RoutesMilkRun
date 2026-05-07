@@ -1,4 +1,5 @@
 import pandas as pd
+from pyxlsb import open_workbook
 
 from ..settings import GRAF_TEMPLATE_HEADER_ROW, get_column_sequence_graf_format
 
@@ -63,6 +64,25 @@ class GrafLoader:
         vehicles = self.read_graf_file(sheet_name, header_row, columns)
         vehicles = vehicles.drop_duplicates()
         return vehicles
+
+    def load_kpi_vehicles_count(self):
+        sheet_name = "Summary"
+        target_row = 10  # C10
+        target_col = 3  # column C
+
+        print(f'Reading cell C10 from file: {self.graf_path} on sheet {sheet_name}.')
+
+        try:
+            with open_workbook(self.graf_path) as wb:
+                with wb.get_sheet(sheet_name) as sheet:
+                    for i, row in enumerate(sheet.rows(), start=1):
+                        if i == target_row:
+                            return row[target_col - 1].v  # zero-based index
+
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f'Could not find the GRAF file in the specified path.'
+            )
 
     def read_graf_file(
             self,

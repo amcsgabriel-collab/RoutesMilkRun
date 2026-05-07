@@ -367,8 +367,8 @@ class Hub:
         return pd.DataFrame(rows)
 
     @staticmethod
-    def _sum_route_cost(routes) -> float:
-        return sum(route.total_cost for route in routes)
+    def _sum_route_attribute(routes, attr) -> float:
+        return sum(getattr(route, attr) for route in routes)
 
     @staticmethod
     def _route_kpis(route) -> KPISet:
@@ -384,7 +384,10 @@ class Hub:
     @property
     def hub_parts_first_leg_kpis(self) -> KPISet:
         return KPISet(
-            total_cost=self._sum_route_cost(self.parts_first_leg_routes),
+            total_cost=self._sum_route_attribute(self.parts_first_leg_routes, "total_cost"),
+            volume=self._sum_route_attribute(self.parts_first_leg_routes, "volume"),
+            weight=self._sum_route_attribute(self.parts_first_leg_routes, "weight"),
+            loading_meters=self._sum_route_attribute(self.parts_first_leg_routes, "loading_meters"),
         )
 
     @property
@@ -392,7 +395,10 @@ class Hub:
         if not self.has_empties_flow:
             return KPISet()
         return KPISet(
-            total_cost=self._sum_route_cost(self.empties_first_leg_routes),
+            total_cost=self._sum_route_attribute(self.empties_first_leg_routes, "total_cost"),
+            volume=self._sum_route_attribute(self.empties_first_leg_routes, "volume"),
+            weight=self._sum_route_attribute(self.empties_first_leg_routes, "weight"),
+            loading_meters=self._sum_route_attribute(self.empties_first_leg_routes, "loading_meters"),
         )
 
     @property
@@ -411,15 +417,15 @@ class Hub:
 
     @property
     def hub_all_linehaul_kpis(self) -> KPISet:
-        return self.hub_parts_linehaul_kpis + self.hub_empties_linehaul_kpis
+        return self.hub_parts_linehaul_kpis.hub_combine(self.hub_empties_linehaul_kpis)
 
     @property
     def hub_parts_kpis(self) -> KPISet:
-        return self.hub_parts_first_leg_kpis + self.hub_parts_linehaul_kpis
+        return self.hub_parts_linehaul_kpis.hub_combine(self.hub_parts_first_leg_kpis)
 
     @property
     def hub_empties_kpis(self) -> KPISet:
-        return self.hub_empties_first_leg_kpis + self.hub_empties_linehaul_kpis
+        return self.hub_empties_linehaul_kpis.hub_combine(self.hub_empties_first_leg_kpis)
 
     @property
     def hub_all_kpis(self) -> KPISet:

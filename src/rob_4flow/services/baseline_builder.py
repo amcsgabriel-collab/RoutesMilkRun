@@ -286,6 +286,7 @@ class BaselineBuilder:
             trips=global_trips,
             hubs=global_hubs,
             is_baseline=True,
+            kpi_vehicles=self.kpi_vehicles_count
         )
         global_baseline.refresh_lock_block_available_routes()
 
@@ -313,6 +314,7 @@ class BaselineBuilder:
         self.carrier_helper = self.graf_loader.load_carrier_helper()
         self.plant_name_helper = self.graf_loader.load_plant_name_helper()
         self.vehicles_database = self.graf_loader.load_vehicles()
+        self.kpi_vehicles_count = self.graf_loader.load_kpi_vehicles_count()
 
     def _load_helper_data(self):
         self.locations_database = self.data_loader.load_excel(
@@ -618,6 +620,7 @@ class BaselineBuilder:
                 trips=trips_by_region[region_name],
                 hubs=hubs_by_region[region_name],
                 is_baseline=True,
+                kpi_vehicles=self.kpi_vehicles_count,
             )
             baseline_scenario.refresh_lock_block_available_routes()
 

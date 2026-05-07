@@ -34,6 +34,15 @@ class ScenarioService:
         project.set_current_scenario("AS-IS")
 
     @staticmethod
+    def discard_draft(project, scenario_name):
+        scenarios = project.current_region.scenarios
+        if scenario_name not in scenarios:
+            raise KeyError(f"Scenario '{scenario_name}' does not exist.")
+        if scenarios[scenario_name].is_baseline:
+            raise CannotEditBaselineError()
+        scenarios[scenario_name].discard_draft()
+
+    @staticmethod
     def _next_name(existing: set[str], base: str) -> str:
         """Return base, base1, base2, ... not present in existing."""
         if base not in existing:

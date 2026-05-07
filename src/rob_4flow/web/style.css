@@ -272,6 +272,8 @@ h1, h2 {
   padding-top: 8px;
 }
 .scenario-item {
+  display: flex;
+  align-items: center;
   padding: 6px 10px;
   cursor: pointer;
   border-radius: 4px;
@@ -281,6 +283,15 @@ h1, h2 {
 }
 .scenario-item.selected {
   background: #dbeafe;
+}
+.scenario-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background-color: #f59e0b; /* amber/orange */
+  vertical-align: middle;
 }
 .scenarios-header {
   display: flex;

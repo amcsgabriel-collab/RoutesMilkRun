@@ -39,6 +39,7 @@ async function initializeProjectPage() {
   document.getElementById("sc-duplicate").addEventListener("click", handleDuplicateScenario);
   document.getElementById("sc-delete").addEventListener("click", handleDeleteScenario);
   document.getElementById("sc-save").addEventListener("click", handleSaveScenario);
+  document.getElementById("sc-discard").addEventListener("click", handleDiscardScenarioDraft);
   // Tables
   document.getElementById("shippers-table").addEventListener("click", openShippersModal);
   document.getElementById("routes-table").addEventListener("click", openRoutesModal);
@@ -120,6 +121,22 @@ async function handleSaveScenario() {
   await refreshScenarioData()
 }
 
+async function handleDiscardScenarioDraft() {
+  if (state.selectedIndex < 0) return alert("Select a scenario first");
+
+  const name = state.scenarios[state.selectedIndex].name;
+
+  if (!confirm("Discard draft for scenario '" + name + "'?")) return;
+
+  try {
+    await apiDelete("/api/scenario/draft", { name });
+
+    await refreshScenarioData();
+  } catch (err) {
+    console.error("Discard draft failed:", err);
+    alert("Discard draft failed: " + (err.message || err));
+  }
+}
 
 // Show/hide the right panel and adjust formatting.
 function ToggleCollapseRightPanel() {
@@ -147,6 +164,8 @@ async function loadProjectOverview() {
     // Change plant name in overview card.
     document.getElementById("plant-name").innerHTML =
       `${escapeHtml(project.context.plant_name || "")}`;
+    document.getElementById("vehicles-kpi").innerHTML =
+      `${escapeHtml(project.context.vehicles_count || "-")}`;
   } catch (e) {
     document.getElementById("overview-body").textContent = "Failed to load";
   }
@@ -176,8 +195,6 @@ async function loadRegions() {
   const currentRegion = project.meta.current_region;
   if (currentRegion) select.value = currentRegion;
 }
-
-
 
 export async function refreshScenarioData() {
   await loadScenarios();
@@ -233,8 +250,13 @@ function renderScenarios() {
   scenariosList.innerHTML = state.scenarios.map((s, i) => {
     const selected = i === state.selectedIndex ? "selected" : "";
     const safeName = escapeHtml((s && s.name) || `scenario ${i}`);
+
+    const draftDot = s?.has_draft
+      ? `<span class="scenario-dot"></span>`
+      : "";
+
     return `<div class="scenario-item ${selected}" data-idx="${i}" role="button" tabindex="0">
-              ${safeName}
+              ${draftDot}${safeName}
             </div>`;
   }).join("");
 
@@ -259,7 +281,6 @@ function renderScenarios() {
     });
   });
 }
-
 
 function wireToggleMap() {
   const tabButtons = document.querySelectorAll(".panel-tab");
