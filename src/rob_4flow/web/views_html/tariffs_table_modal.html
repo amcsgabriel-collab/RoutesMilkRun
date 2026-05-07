@@ -1,0 +1,47 @@
+<div class="modal-header">
+  <h3 id="tariffs-title">Tariffs - FTL / MR</h3>
+</div>
+
+<div class="modal-body">
+  <div class="tariffs-tabs">
+    <button id="tariffs-tab-ftl" type="button" class="tariffs-tab active">
+      FTL / MR
+    </button>
+
+    <button id="tariffs-tab-ltl" type="button" class="tariffs-tab">
+      LTL / Hub
+    </button>
+  </div>
+
+  <div class="table-top-bar">
+    <input
+      id="tariffs-filter"
+      class="table-top-filter"
+      type="text"
+      placeholder="Filter tariffs..."
+    />
+
+    <button id="tariffs-add" type="button">Add tariff</button>
+    <button id="tariffs-refresh" type="button">Refresh</button>
+  </div>
+
+  <div id="tariffs-error" class="table-error" style="display:none"></div>
+
+  <div style="overflow:auto; max-height:420px; border-radius:6px; background:#fff;">
+    <table id="tariffs-table" class="tariffs-table" style="width:100%;border-collapse:collapse">
+      <thead id="tariffs-thead"></thead>
+
+      <tbody id="tariffs-tbody">
+        <tr>
+          <td colspan="10" style="padding:20px;text-align:center;color:#6b7280">
+            Loading…
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-footer" style="margin-top:10px;text-align:right;">
+  <button id="tariffs-close" type="button">Close</button>
+</div>

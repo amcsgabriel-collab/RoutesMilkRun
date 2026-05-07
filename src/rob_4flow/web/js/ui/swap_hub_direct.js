@@ -1,7 +1,7 @@
 import { loadHtml, escapeHtml } from "../utils.js";
 import { openModal, closeModal } from "./modal.js";
 import { apiPost, apiGet } from "../api.js";
-import { showMap } from "../views/project.js"
+import { showMap, refreshScenarioData } from "../views/project.js"
 import { ManualSwapFlow } from "./swap_resolve_missing.js";
 
 
@@ -338,10 +338,12 @@ async function confirmSwap() {
           await manualSwapFlow.run();
           alert("Swap resolved successfully.");
           showMap();
+          refreshScenarioData();
         } else {
           alert("Swap applied successfully.");
           closeModal();
           showMap();
+          refreshScenarioData();
         }
         
     } catch(e) {

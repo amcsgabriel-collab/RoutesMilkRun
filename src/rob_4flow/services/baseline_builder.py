@@ -271,11 +271,11 @@ class BaselineBuilder:
         self._log("Preparing Tariffs...")
         self._create_tariffs()
 
-        self._log("Creating global hubs...")
-        global_hubs = self._create_hubs_global()
-
         self._log("Creating global trips...")
         global_trips = self._create_trips_global()
+
+        self._log("Creating global hubs...")
+        global_hubs = self._create_hubs_global()
 
         self._log("Retaining only vehicles used by existing routes...")
         self._retain_only_used_vehicles(global_trips)
@@ -358,14 +358,13 @@ class BaselineBuilder:
             plant_cofor=self.plant.cofor,
         )
 
-        self.ftl_tariffs_database = transformer.get_transformed_tariffs("ftl")
+        self.ftl_tariffs_database, self.carriers_by_zip_key = transformer.get_transformed_tariffs("ftl")
         ftl_tariffs_by_key = ftl_tariffs_from_dataframe(self.ftl_tariffs_database)
 
         self.ltl_tariffs_database = transformer.get_transformed_tariffs("ltl")
         ltl_tariffs_by_key = ltl_tariffs_from_dataframe(self.ltl_tariffs_database)
 
         self.hub_tariffs_database = transformer.get_transformed_tariffs("hub")
-        self.hub_tariffs_database.to_csv('hub_debug.csv')
         hub_tariffs_by_key = hub_tariffs_from_dataframe(self.hub_tariffs_database)
 
         self.tariffs_service = TariffService(
@@ -383,18 +382,19 @@ class BaselineBuilder:
         ).aggregate_database_by_shipper()
 
         sellers = SellerRepository(self.hub_demand_database).get_by_shipper()
-        carriers = CarrierRepository(self.hub_demand_database).get_all_hub()
+        self.hub_carriers = CarrierRepository(self.hub_demand_database).get_all_hub()
 
         hub_shippers_by_cofor = ShipperRepository(aggregated_demand_by_shipper).get_all(
             sellers_by_shipper=sellers,
-            carriers=carriers["first_leg"],
+            carriers=self.hub_carriers["first_leg"],
             are_hub_shippers=True,
         )
         verify_coordinates(hub_shippers_by_cofor)
+        self.assign_carrier_to_hub_shipper({s for s in hub_shippers_by_cofor.values()})
 
         hubs = HubRepository(self.hub_demand_database).get_all(
             shippers=hub_shippers_by_cofor,
-            carriers=carriers,
+            carriers=self.hub_carriers,
             vehicles=self.vehicles,
             plant=self.plant,
         )
@@ -438,18 +438,6 @@ class BaselineBuilder:
 
         raise TypeError(f"Unsupported route type for hub fallback: {type(route)}")
 
-    # def _assign_hub_tariffs(self, hubs: set[Hub]) -> None:
-    #     for hub in hubs:
-    #         self._assign_with_hub_fallback(hub.parts_first_leg_routes)
-    #
-    #         if hub.has_empties_flow:
-    #             self._assign_with_hub_fallback(hub.empties_first_leg_routes)
-    #
-    #         self._assign_with_hub_fallback(hub.parts_linehaul_route)
-    #
-    #         if hub.has_empties_flow:
-    #             self._assign_with_hub_fallback(hub.empties_linehaul_route)
-
     def _assign_hub_tariffs(self, hubs: set[Hub]) -> None:
         for hub in hubs:
             self._assign_with_hub_fallback(hub.parts_first_leg_routes)
@@ -465,7 +453,7 @@ class BaselineBuilder:
         Create all direct trips from the full direct demand database, without region filtering.
         """
         direct_sellers = SellerRepository(self.direct_demand_database).get_by_shipper()
-        direct_carriers = CarrierRepository(self.direct_demand_database).get_all()
+        self.direct_carriers = CarrierRepository(self.direct_demand_database).get_all()
 
         aggregated_direct_demand_by_shipper = DemandDataTransformer(
             self.direct_demand_database
@@ -474,7 +462,7 @@ class BaselineBuilder:
         direct_shippers_by_cofor = ShipperRepository(
             aggregated_direct_demand_by_shipper
         ).get_all(
-            carriers=direct_carriers,
+            carriers=self.direct_carriers,
             sellers_by_shipper=direct_sellers,
         )
         verify_coordinates(shippers=direct_shippers_by_cofor)
@@ -538,7 +526,8 @@ class BaselineBuilder:
 
         return trips
 
-    def _trip_owner_region(self, trip: Trip) -> str:
+    @staticmethod
+    def _trip_owner_region(trip: Trip) -> str:
         """
         Assign a trip to exactly one sourcing region.
 
@@ -559,7 +548,8 @@ class BaselineBuilder:
             )
         return region
 
-    def _hub_owner_region(self, hub: Hub) -> str:
+    @staticmethod
+    def _hub_owner_region(hub: Hub) -> str:
         """
         Assign a hub to exactly one sourcing region.
 
@@ -653,3 +643,39 @@ class BaselineBuilder:
         }
 
         self._log(f"Retained {len(self.vehicles)} vehicles used by existing routes")
+
+    def assign_carrier_to_hub_shipper(self, shippers: set[Shipper]) -> None:
+        all_carriers = self.direct_carriers | self.hub_carriers['first_leg'] | self.hub_carriers['linehaul']
+        direct_carriers_by_group = {
+            carrier.group: carrier
+            for carrier in all_carriers.values()
+        }
+
+        print(direct_carriers_by_group)
+
+        # Build fallback: most frequent carrier per country
+        zip_df = pd.Series(self.carriers_by_zip_key, name="carrier").reset_index()
+        zip_df.columns = ["zip_key", "carrier"]
+        zip_df["country"] = zip_df["zip_key"].str[:2]
+
+        fallback_by_country = (
+            zip_df.groupby("country")["carrier"]
+            .agg(lambda x: x.value_counts().idxmax())
+            .to_dict()
+        )
+
+        for shipper in shippers:
+            zip_key = shipper.zip_key(2)
+            carrier_short_name = self.carriers_by_zip_key.get(zip_key)
+
+            if carrier_short_name is None:
+                carrier_short_name = fallback_by_country.get(shipper.country[:2])
+
+            if carrier_short_name is None:
+                continue
+
+            carrier = direct_carriers_by_group.get(carrier_short_name)
+            if carrier is None:
+                continue
+
+            shipper.direct_carrier = carrier

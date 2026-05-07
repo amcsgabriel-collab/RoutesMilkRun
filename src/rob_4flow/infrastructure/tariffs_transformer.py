@@ -88,7 +88,7 @@ class TariffsTransformer:
         tariffs = self._rename_tariffs_columns(tariffs, tariffs_type)
         tariffs = self._split_tariffs_key(tariffs)
         if tariffs_type == 'ftl':
-            return self._melt_tariffs_deviation_bucket(tariffs)
+            return self._melt_tariffs_deviation_bucket(tariffs), self._export_carrier_per_zip(tariffs)
         tariffs = self._melt_tariffs_chargeable_weight(tariffs, tariffs_type)
         return self._filter_empty_cost_rows(tariffs)
 
@@ -200,3 +200,36 @@ class TariffsTransformer:
     @staticmethod
     def _filter_empty_cost_rows(tariffs: pd.DataFrame) -> pd.DataFrame:
         return tariffs[tariffs['Cost per 100kg'] > 0]
+
+    def _export_carrier_per_zip(self, tariffs_source: pd.DataFrame) -> None:
+
+            tariffs = tariffs_source.copy()
+            tariffs = tariffs[tariffs['Origin Code'].astype(str).str.len() == 4]
+            tariffs = tariffs[tariffs['Destination Code'] == self.plant]
+            tariffs = tariffs.drop_duplicates(subset=["Origin Code"], keep="last")
+
+            carrier_map = (
+                tariffs
+                .dropna(subset=['Origin Code', "Carrier Short Name"])
+                .assign(
+                    **{
+                        'Origin Code': tariffs['Origin Code'].astype(str).str.strip(),
+                        'Carrier Short Name': tariffs['Carrier Short Name'].astype(str).str.strip(),
+                    }
+                )
+            )
+
+            carrier_map = carrier_map[
+                (carrier_map['Origin Code'] != "") &
+                (carrier_map['Carrier Short Name'] != "")
+                ]
+
+            result = (
+                carrier_map
+                .groupby(['Origin Code', "iTMS Mode"])['Carrier Short Name']
+                .apply(lambda carriers: sorted(carriers.drop_duplicates()))
+                .reset_index(name="Carriers")
+            )
+            result["Carriers"] = result["Carriers"].apply(lambda carriers: ", ".join(carriers))
+            result = result.drop(columns=["iTMS Mode"])
+            return dict(zip(result["Origin Code"], result["Carriers"]))

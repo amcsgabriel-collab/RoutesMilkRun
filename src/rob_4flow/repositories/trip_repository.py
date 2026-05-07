@@ -62,7 +62,14 @@ class TripRepository:
         for _, row in roundtrip_rows.iterrows():
             roundtrip_id = str(row["Roundtrip identifier"]).strip()
             route_name = row["Route name"]
-            demand_type = str(row["Parts or Empties"]).strip()
+            raw_demand_type = row["Parts or Empties"]
+            if pd.isna(raw_demand_type):
+                raise ValueError(
+                    f"Missing value in 'Parts or Empties' at row index {row.name} "
+                    f"(Route name={row.get('Route name')}, "
+                    f"Roundtrip identifier={row.get('Roundtrip identifier')})"
+                )
+            demand_type = str(raw_demand_type).strip()
 
             if roundtrip_id not in roundtrip_map:
                 roundtrip_map[roundtrip_id] = {"P": set(), "E": set()}
@@ -113,7 +120,14 @@ class TripRepository:
 
         for _, row in singletrip_rows.iterrows():
             route_name = row["Route name"]
-            demand_type = row["Parts or Empties"]
+            raw_demand_type = row["Parts or Empties"]
+            if pd.isna(raw_demand_type):
+                raise ValueError(
+                    f"Missing value in 'Parts or Empties' at row index {row.name} "
+                    f"(Route name={row.get('Route name')}, "
+                    f"Roundtrip identifier={row.get('Roundtrip identifier')})"
+                )
+            demand_type = str(raw_demand_type).strip()
 
             if demand_type == "P":
                 parts_route = parts_by_name.get(route_name)

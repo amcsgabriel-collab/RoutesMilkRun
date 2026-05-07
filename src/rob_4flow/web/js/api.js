@@ -18,17 +18,15 @@ async function apiRequest(path, { method, body, headers = {} } = {}) {
     }
 
     const res = await fetch(path, opts);
-
     const contentType = res.headers.get("content-type") || "";
-    const isJson = contentType.includes("application/json");
 
+    const rawText = await res.text().catch(() => "");
     let data = null;
 
-    if (isJson) {
-        data = await res.json().catch(() => null);
-    } else {
-        const text = await res.text().catch(() => "");
-        data = text ? { text } : null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = rawText ? { text: rawText } : null;
     }
 
     if (!res.ok) {
@@ -46,7 +44,7 @@ async function apiRequest(path, { method, body, headers = {} } = {}) {
         throw err;
   }
 
-  return data?.data;
+  return data?.data ?? data;
 }
 
 export function apiGet(path) {

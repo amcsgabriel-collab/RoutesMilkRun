@@ -51,11 +51,11 @@ export async function openTableModal(config) {
   openModal(html, "modal-large");
 
   const state = {
-  list: [],
-  rows: [],
-  columnFilters: {},
-  expandedRows: new Set()
-};
+    list: [],
+    rows: [],
+    columnFilters: {},
+    expandedRows: new Set()
+  };
 
   async function loadAndRender() {
     const tbody = $id(config.tbodyId);
@@ -65,16 +65,27 @@ export async function openTableModal(config) {
       ? document.querySelector(`input[name="${config.flowName}"]:checked`)?.value || "parts"
       : null;
 
+    const columns = resolveConfig(config.columns, state, flow) || [];
+
     if (err) {
       err.style.display = "none";
       err.textContent = "";
     }
 
-    tbody.innerHTML = tableMessage(config.columns.length, "Loading…");
+    tbody.innerHTML = tableMessage(columns.length, "Loading…");
 
     try {
-      state.list = await apiGet(config.endpoint);
-      if (!Array.isArray(state.list)) state.list = [];
+      const endpoint =
+        typeof config.endpoint === "function"
+          ? config.endpoint(state)
+          : config.endpoint;
+
+      const result = await apiGet(endpoint);
+      state.list = Array.isArray(result)
+      ? result
+      : result?.rows || result?.data?.rows || [];
+
+      state.options = result?.options || result?.data?.options || {};
 
       if (config.validate) {
         state.list.forEach(config.validate);
@@ -84,37 +95,53 @@ export async function openTableModal(config) {
         .map((item, i) => config.mapItem ? config.mapItem(item, flow, i) : item)
         .filter(Boolean);
 
-      const visibleRows = state.rows.filter(row => matchesFilters(row, config, state));
+      const renderColumns = resolveConfig(config.columns, state, flow);
 
-        visibleRows.forEach(row => {
-          row._expanded = state.expandedRows.has(row._rowId);
+      if (config.onBeforeRender) {
+        config.onBeforeRender({
+          state,
+          config,
+          columns: renderColumns,
+          flow,
+          loadAndRender
         });
+      }
 
-        tbody.innerHTML = visibleRows.length
-  ? [
-      ...visibleRows.map((row, i) =>
-        renderRow(row, i, config.columns, config, state)
-      ),
-      config.totalRow ? renderRow(config.totalRow(visibleRows), "total", config.columns, config, state) : ""
-    ].join("")
-  : tableMessage(config.columns.length, config.emptyText?.(flow) || "No rows");
+      const visibleRows = state.rows.filter(row => matchesFilters(row, config, state, flow));
+
+      visibleRows.forEach(row => {
+        row._expanded = state.expandedRows.has(row._rowId);
+      });
+
+      tbody.innerHTML = visibleRows.length
+        ? [
+            ...visibleRows.map((row, i) =>
+              renderRow(row, i, renderColumns, config, state)
+            ),
+            config.totalRow
+              ? renderRow(config.totalRow(visibleRows), "total", renderColumns, config, state)
+              : ""
+          ].join("")
+        : tableMessage(renderColumns.length, resolveConfig(config.emptyText, state, flow) || "No rows");
 
       tbody.querySelectorAll(".table-expand-btn").forEach(btn => {
-      btn.addEventListener("click", e => {
-        e.stopPropagation();
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
 
-        const rowId = btn.dataset.expandRow;
+          const rowId = btn.dataset.expandRow;
 
-        toggleChildRows(rowId, config, state);
+          toggleChildRows(rowId, renderColumns, config, state);
+        });
       });
-    });
     } catch (e) {
+      console.error("Table modal error:", e);
+
       if (err) {
         err.textContent = e.message || String(e);
         err.style.display = "block";
       }
 
-      tbody.innerHTML = tableMessage(config.columns.length, "Error");
+      tbody.innerHTML = tableMessage(columns.length, "Error");
     }
   }
 
@@ -130,17 +157,15 @@ export async function openTableModal(config) {
 function renderRow(row, i, columns, config = {}, state = {}) {
   row._rowId = row._rowId ?? `row-${i}`;
 
-  const mainRow = `
+  return `
     <tr class="sh-row" data-row-id="${row._rowId}" style="${row._rowId === "total-row" ? "font-weight:700;background:#f8fafc" : "cursor:default"}">
       ${columns.map(col => `
         <td style="${cellStyle(col)}">
-          ${col.render ? col.render(row) : text(row[col.key])}
+          ${col.render ? col.render(row, state) : text(row[col.key])}
         </td>
       `).join("")}
     </tr>
   `;
-
-  return mainRow;
 }
 
 function renderChildRow(child, columns, config, parentRowId) {
@@ -155,7 +180,7 @@ function renderChildRow(child, columns, config, parentRowId) {
   `;
 }
 
-function toggleChildRows(rowId, config, state) {
+function toggleChildRows(rowId, columns, config, state) {
   const parentRow = document.querySelector(`tr[data-row-id="${CSS.escape(rowId)}"]`);
   if (!parentRow) return;
 
@@ -175,7 +200,7 @@ function toggleChildRows(rowId, config, state) {
   if (!parentData?.children?.length) return;
 
   const html = parentData.children
-    .map(child => renderChildRow(child, config.columns, config, rowId))
+    .map(child => renderChildRow(child, columns, config, rowId))
     .join("");
 
   parentRow.insertAdjacentHTML("afterend", html);
@@ -184,7 +209,6 @@ function toggleChildRows(rowId, config, state) {
   const btn = parentRow.querySelector(".table-expand-btn");
   if (btn) btn.textContent = "−";
 }
-
 
 function cellStyle(col) {
   return [
@@ -205,14 +229,16 @@ function tableMessage(colspan, message) {
   `;
 }
 
-function matchesFilters(row, config, state) {
+function matchesFilters(row, config, state, flow) {
   const topFilter = config.topFilterId
     ? ($id(config.topFilterId)?.value || "").trim().toLowerCase()
     : "";
 
+  const searchKeys = resolveConfig(config.searchKeys, state, flow) || [];
+
   const matchesTop =
     !topFilter ||
-    (config.searchKeys || []).some(key =>
+    searchKeys.some(key =>
       String(row[key] ?? "").toLowerCase().includes(topFilter)
     );
 
@@ -242,15 +268,16 @@ function wireCommon(config, state, loadAndRender) {
     });
   }
 
-  document.querySelectorAll(".table-filter-btn").forEach(btn => {
-    btn.addEventListener("click", e => {
+  document.addEventListener("click", e => {
+    const btn = e.target.closest(".table-filter-btn");
+
+    if (btn) {
       e.stopPropagation();
       openFilterMenu(btn.dataset.field, btn, config, state, loadAndRender);
-    });
-  });
+      return;
+    }
 
-  document.addEventListener("click", e => {
-    if (!e.target.closest(".table-filter-menu") && !e.target.closest(".table-filter-btn")) {
+    if (!e.target.closest(".table-filter-menu")) {
       document.querySelector(".table-filter-menu")?.remove();
     }
   });
@@ -259,11 +286,13 @@ function wireCommon(config, state, loadAndRender) {
 function openFilterMenu(field, button, config, state, loadAndRender) {
   document.querySelector(".table-filter-menu")?.remove();
 
-  const values = [...new Set(
-    state.rows.map(row => String(row[field] ?? "")).filter(Boolean)
-  )].sort();
+  const values = state.options?.[field] || [...new Set(
+      state.rows.map(row => String(row[field] ?? "")).filter(Boolean)
+    )].sort();
 
-  const selected = state.columnFilters[field] || new Set(values);
+  const selected = state.columnFilters[field] instanceof Set
+  ? state.columnFilters[field]
+  : new Set(values);
 
   const menu = document.createElement("div");
   menu.className = "table-filter-menu";
@@ -281,44 +310,51 @@ function openFilterMenu(field, button, config, state, loadAndRender) {
   `;
 
   menu.innerHTML = `
-  <input
-    type="text"
-    data-action="filter-options"
-    placeholder="Search options..."
-    style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:6px;border:1px solid #d1d5db;border-radius:6px"
-  >
+    <input
+      type="text"
+      data-action="filter-options"
+      placeholder="Search options..."
+      style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:6px;border:1px solid #d1d5db;border-radius:6px"
+    >
 
-  <div style="display:flex;gap:8px;margin-bottom:8px">
-    <button type="button" data-action="select-all">Select all</button>
-    <button type="button" data-action="clear">Clear</button>
-  </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button type="button" data-action="select-all">Select all</button>
+      <button type="button" data-action="clear">Clear</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+      <button type="button" data-action="cancel">Cancel</button>
+      <button type="button" data-action="apply">Apply</button>
+    </div>
 
-  <div data-role="options">
-    ${values.map(v => `
-      <label data-option-text="${escapeHtml(v.toLowerCase())}" style="display:block;padding:4px 2px">
-        <input type="checkbox" value="${escapeHtml(v)}" ${selected.has(v) ? "checked" : ""}>
-        ${escapeHtml(v)}
-      </label>
-    `).join("")}
-  </div>
+    <div data-role="options">
+      ${values.map(v => `
+        <label data-option-text="${escapeHtml(v.toLowerCase())}" style="display:block;padding:4px 2px">
+          <input type="checkbox" value="${escapeHtml(v)}" ${selected.has(v) ? "checked" : ""}>
+          ${escapeHtml(v)}
+        </label>
+      `).join("")}
+    </div>
 
-  <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
-    <button type="button" data-action="cancel">Cancel</button>
-    <button type="button" data-action="apply">Apply</button>
-  </div>
-`;
+  `;
 
   document.body.appendChild(menu);
 
   const optionSearch = menu.querySelector('[data-action="filter-options"]');
 
-    optionSearch.addEventListener("input", () => {
-      const q = optionSearch.value.trim().toLowerCase();
+  menu.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    menu.querySelector('[data-action="apply"]').click();
+  }
+});
 
-      menu.querySelectorAll("[data-option-text]").forEach(label => {
-        label.style.display = label.dataset.optionText.includes(q) ? "block" : "none";
-      });
+  optionSearch.addEventListener("input", () => {
+    const q = optionSearch.value.trim().toLowerCase();
+
+    menu.querySelectorAll("[data-option-text]").forEach(label => {
+      label.style.display = label.dataset.optionText.includes(q) ? "block" : "none";
     });
+  });
 
   const rect = button.getBoundingClientRect();
   menu.style.left = `${rect.left}px`;
@@ -351,8 +387,17 @@ function openFilterMenu(field, button, config, state, loadAndRender) {
   };
 }
 
+function resolveConfig(value, state, ...args) {
+  if (typeof value !== "function") return value;
+
+  const result = value(state, ...args);
+
+  return result;
+}
+
 function debounce(fn, wait = 220) {
   let t;
+
   return () => {
     clearTimeout(t);
     t = setTimeout(fn, wait);

@@ -48,6 +48,12 @@ class ShipperRepository:
                     original_network=original_network,
                 )
 
+            carrier_id = (
+                first_row["First Leg Carrier ID"]
+                if are_hub_shippers
+                else first_row["Carrier ID"]
+            )
+
             shippers[cofor] = Shipper(
                 cofor=cofor,
                 name=first_row["SHIPPER NAME"],
@@ -59,9 +65,8 @@ class ShipperRepository:
                 sourcing_region=first_row["SHIPPER SOURCING REGION"],
                 parts_demand=build_demand(parts_row, "P"),
                 empties_demand=build_demand(empties_row, "E"),
-                carrier=carriers[
-                    first_row["First Leg Carrier ID"] if are_hub_shippers else first_row["Carrier ID"]
-                ],
+                direct_carrier=carriers[carrier_id] if not are_hub_shippers else None,
+                hub_carrier=carriers[carrier_id] if are_hub_shippers else None,
                 coordinates=(first_row["Latitude"], first_row["Longitude"]),
             )
 

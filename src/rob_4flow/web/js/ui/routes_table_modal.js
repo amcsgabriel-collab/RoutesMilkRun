@@ -97,9 +97,9 @@ childRender: {
   name: r => text(r.shipper_cofor),
 
   stop_cost: r => `${formatNumber(r.allocation_percentage)}%`,
-  weight: r => stackedDemand(r.weight, r.allocated_weight),
-  volume: r => stackedDemand(r.volume, r.allocated_volume),
-  loading_meters: r => stackedDemand(r.loading_meters, r.allocated_loading_meters)
+  weight: r => stackedDemand(r.allocated_weight, r.weight),
+  volume: r => stackedDemand(r.allocated_volume, r.volume),
+  loading_meters: r => stackedDemand(r.allocated_loading_meters, r.loading_meters)
 },
 
 

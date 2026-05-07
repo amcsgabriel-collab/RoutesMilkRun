@@ -71,7 +71,7 @@ class MilkrunPatternDemand:
 
     @property
     def carrier(self):
-        return self.starting_point.carrier
+        return self.starting_point.direct_carrier
 
     @property
     def plant(self):

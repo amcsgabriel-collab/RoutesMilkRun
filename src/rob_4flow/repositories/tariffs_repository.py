@@ -3,7 +3,7 @@ import pandas as pd
 from ..domain.tariff import FtlTariff, LtlTariff, HubTariff
 
 
-def ftl_tariffs_from_dataframe(tariffs_dataframe: pd.DataFrame) -> dict[tuple[str, str, str, str], FtlTariff]:
+def ftl_tariffs_from_dataframe(tariffs_dataframe: pd.DataFrame) -> dict[tuple[str, str, str, str, str], FtlTariff]:
     return {
         (
             row['Carrier Short Name'],

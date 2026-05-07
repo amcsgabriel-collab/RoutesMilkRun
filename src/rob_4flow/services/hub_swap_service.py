@@ -32,8 +32,15 @@ class HubSwapService:
         current_direct_shippers = set(scenario.direct_shippers.values())
         current_hub_shippers = set(scenario.hub_shippers.values())
 
-        direct_to_move = {s for s in current_direct_shippers if s.qualifies_for_hub(thresholds)}
-        hub_to_move = {s for s in current_hub_shippers if not s.qualifies_for_hub(thresholds)}
+        direct_to_move = {
+            s for s in current_direct_shippers
+            if s.current_network == "direct" and s.qualifies_for_hub(thresholds)
+        }
+
+        hub_to_move = {
+            s for s in current_hub_shippers
+            if s.current_network == "hub" and not s.qualifies_for_hub(thresholds)
+        }
 
         new_direct_shippers = current_direct_shippers - direct_to_move | hub_to_move
         new_hub_shippers = current_hub_shippers - hub_to_move | direct_to_move
@@ -271,6 +278,9 @@ class HubSwapService:
         if shipper not in core_hub.shippers:
             core_hub.shippers.append(shipper)
 
+        shipper.hub_carrier = core_hub.first_leg_carrier
+        shipper.current_network = "hub"
+
         if new_parts_first_leg is not None:
             core_hub.parts_first_leg_routes.add(new_parts_first_leg)
 
@@ -378,6 +388,7 @@ class HubSwapService:
                 ),
             )
         )
+        shipper.current_network = "direct"
         return True
 
     def _prepare_hub_helper(self, plant_name: str, hubs) -> None:

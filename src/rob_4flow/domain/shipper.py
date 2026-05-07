@@ -19,12 +19,14 @@ class Shipper:
             sourcing_region: str,
             parts_demand: Demand,
             empties_demand: Demand,
-            carrier: Carrier,
-            original_network: str = None,
+            direct_carrier: Carrier | None = None,
+            hub_carrier: Carrier | None = None,
+            original_network: str | None = None,
             coordinates: tuple[float, float] | None = None,
     ):
         self.cofor = cofor
         self.name = name
+        self.current_network = original_network
         self.original_network = original_network
         self.zip_code = zip_code
         self.city = city
@@ -33,7 +35,8 @@ class Shipper:
         self.sourcing_region = sourcing_region
         self.parts_demand = parts_demand
         self.empties_demand = empties_demand
-        self.carrier = carrier
+        self.hub_carrier = hub_carrier
+        self.direct_carrier = direct_carrier
         self.coordinates = coordinates
 
 
@@ -68,6 +71,10 @@ class Shipper:
     @property
     def is_ftl_exclusive_empties(self):
         return self.verify_ftl_exclusive(self.empties_demand)
+
+    @property
+    def carrier(self) -> Carrier:
+        return self.hub_carrier if self.current_network == "hub" else self.direct_carrier
 
     @staticmethod
     def verify_ftl_exclusive(demand):
@@ -106,7 +113,7 @@ class Shipper:
             "cofor": self.cofor,
             "zip_key": self.zip_key(2),
             "coordinates": self.formatted_coordinates,
-            "original_network": self.original_network,
+            "original_network": str.capitalize(self.original_network),
             "parts_demand": {
                 "weight": self.parts_demand.weight,
                 "volume": self.parts_demand.volume,

@@ -6,6 +6,7 @@ import { openShippersModal } from "../ui/shippers_table_modal.js"
 import { openRoutesModal } from "../ui/routes_table_modal.js"
 import { openHubsModal } from "../ui/hubs_table_modal.js"
 import { openVehiclesModal } from "../ui/vehicles_table_modal.js"
+import { openTariffsModal } from "../ui/tariffs_table_modal.js"
 import { openSwapModal } from '../ui/swap_hub_direct.js';
 import { setAppBusy } from "../ui/overlay.js";
 import { openLockRoutesModal, openBlockRoutesModal } from "../ui/lock_block_routes_modal.js";
@@ -43,6 +44,7 @@ async function initializeProjectPage() {
   document.getElementById("routes-table").addEventListener("click", openRoutesModal);
   document.getElementById("hubs-table").addEventListener("click", openHubsModal);
   document.getElementById("vehicles-table").addEventListener("click", openVehiclesModal);
+  document.getElementById("tariffs-table").addEventListener("click", openTariffsModal);
   // Solver scenario actions
   document.getElementById("swap-hub-direct").addEventListener("click", openSwapModal);
   document.getElementById("solver-run").addEventListener("click", runSolver);
@@ -177,11 +179,10 @@ async function loadRegions() {
 
 
 
-async function refreshScenarioData() {
+export async function refreshScenarioData() {
   await loadScenarios();
   applyScenarioSelectionFromServer();
   renderScenarios();
-  renderScenarioSummary();
   await showMap();
   await loadScenarioKpis();
 }
@@ -214,7 +215,6 @@ async function applyScenarioSelectionFromServer() {
     if (idx >= 0) {
       state.selectedIndex = idx;
       renderScenarios();
-      renderScenarioSummary();
       await showMap();
       await loadScenarioKpis();
     }
@@ -260,41 +260,6 @@ function renderScenarios() {
   });
 }
 
-function renderScenarioSummary() {
-  const out = document.getElementById("scenario-summary");
-  if (!out) return console.warn("No #scenario-summary element found");
-  if (state.selectedIndex < 0) { out.textContent = "No scenario selected"; return; }
-  const s = state.scenarios[state.selectedIndex];
-  if (!s) { out.textContent = "No scenario selected"; return; }
-
-  const costStr = (s.total_cost != null)
-    ? Number(s.direct_total_cost).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })
-    : "—";
-
-  const freqStr = (s.trucks != null)
-    ? Number(s.direct_trucks).toLocaleString(undefined, { maximumFractionDigits: 2 })
-    : "—";
-
-  const utilStr = (s.utilization != null)
-    ? (Number(s.direct_utilization) * (Number(s.direct_utilization) <= 1 ? 100 : 1))
-      .toLocaleString(undefined, { maximumFractionDigits: 1 }) + "%"
-    : "—";
-
-  const updatedStr = s.updated_at
-    ? new Date(s.updated_at).toLocaleString()
-    : "—";
-
-  out.innerHTML = `
-    <div><strong>${escapeHtml(s.name)}</strong></div>
-    <div>Direct cost: ${costStr}</div>
-    <div>Direct total frequency: ${freqStr}</div>
-    <div>Direct overall utilization: ${utilStr}</div>
-    <div>updated at: ${updatedStr}</div>
-  `;
-}
 
 function wireToggleMap() {
   const tabButtons = document.querySelectorAll(".panel-tab");

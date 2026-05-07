@@ -395,6 +395,59 @@ def create_app():
 
         return success()
 
+
+    # ----------------------------------------------------
+    # Tariffs table
+
+    @app.get("/api/tariffs")
+    @query_endpoint
+    def get_tariffs(data):
+        tariff_type = data.get("tariff_type", "ltl_hub")
+        query = data.get("q", "").strip()
+
+        limit = int(data.get("limit", 500))
+        offset = int(data.get("offset", 0))
+
+        column_filters = {
+            key: value
+            for key, value in data.items()
+            if key not in {"tariff_type", "q", "limit", "offset"}
+               and value not in (None, "")
+        }
+
+        tariffs_service = pm.project.context.tariffs_service
+
+        result = tariffs_service.serialize_tariffs(
+            tariff_type=tariff_type,
+            query=query,
+            column_filters=column_filters,
+            limit=limit,
+            offset=offset,
+        )
+
+        result["options"] = tariffs_service.serialize_tariff_options(
+            tariff_type=tariff_type
+        )
+
+        return success(result)
+
+    @app.post("/api/tariffs")
+    @json_endpoint
+    def create_tariff(data):
+        tariff = data.get("tariff")
+        tariffs_service = pm.project.context.tariffs_service
+        tariffs_service.upsert(tariff)
+        return success()
+
+    @app.put("/api/tariffs")
+    @json_endpoint
+    def update_tariff(data):
+        tariff = data.get("tariff")
+        tariffs_service = pm.project.context.tariffs_service
+        tariffs_service.upsert(tariff)
+        return success()
+
+
     # ----------------------------------------------------
     # Map HTML
 

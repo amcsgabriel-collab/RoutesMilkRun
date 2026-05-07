@@ -23,6 +23,7 @@ class DemandDataTransformer:
 
         if self.carrier_helper is None or self.plant_name_helper is None or self.locations is None:
             raise MissingHelperDataError()
+        self.database = self.database.dropna(how="all")
         self.add_plant_name()
         self.add_plant_coordinates()
         self.add_shipper_coordinates()
