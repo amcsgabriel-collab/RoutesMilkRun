@@ -4,6 +4,14 @@ from .route_costing_strategies import TruckBasedCosting, WeightBasedCosting
 from .route_demand_aggregation_strategies import HubAggregateDemand
 from ..tariff import FtlTariff, LtlTariff
 
+def get_linehaul_frequency_capacity(frequency: int) -> float:
+    if frequency == 1:
+        return 10_000
+    if frequency == 2:
+        return 20_000
+    if frequency == 3:
+        return 30_000
+    raise ValueError(f"Unsupported linehaul frequency: {frequency}")
 
 class LinehaulRoute(Route):
     def __init__(self, hub, vehicle: Vehicle, carrier: Carrier, flow_direction: str):

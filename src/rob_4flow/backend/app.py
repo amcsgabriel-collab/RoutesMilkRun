@@ -9,6 +9,8 @@ from flask import Flask, jsonify, request, Response, stream_with_context, redire
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
+from rob_4flow.services.map_generator import ScenarioMapPatchBuilder, build_scenario_map_patch_from_changes, \
+    combine_patches, make_patch
 from ..domain.exceptions import NoProjectError, UnsavedScenarioError, NonOptimalSolutionError, ExportingBaselineError, \
     CannotEditBaselineError, InvalidFileTypeError, ShippersWithoutLocationsError
 from ..services.project_manager import ProjectManager
@@ -421,7 +423,7 @@ def create_app():
                and value not in (None, "")
         }
 
-        tariffs_service = pm.project.context.tariffs_service
+        tariffs_service = pm.project.context.tariff_service
 
         result = tariffs_service.serialize_tariffs(
             tariff_type=tariff_type,
@@ -441,7 +443,7 @@ def create_app():
     @json_endpoint
     def create_tariff(data):
         tariff = data.get("tariff")
-        tariffs_service = pm.project.context.tariffs_service
+        tariffs_service = pm.project.context.tariff_service
         tariffs_service.upsert(tariff)
         return success()
 
@@ -449,7 +451,7 @@ def create_app():
     @json_endpoint
     def update_tariff(data):
         tariff = data.get("tariff")
-        tariffs_service = pm.project.context.tariffs_service
+        tariffs_service = pm.project.context.tariff_service
         tariffs_service.upsert(tariff)
         return success()
 
@@ -457,21 +459,46 @@ def create_app():
     # ----------------------------------------------------
     # Map HTML
 
-    @app.post("/api/map")
+    @app.get("/api/scenario-map/base")
+    @with_pm_lock
+    def api_scenario_map_base():
+        scenario = pm.project.current_scenario
+        baseline_scenario =  pm.project.current_region.scenarios['AS-IS']
+
+        builder = ScenarioMapPatchBuilder(scenario, baseline_scenario)
+        return success(builder.base_payload())
+
+    @app.get("/api/scenario-map/full")
+    @with_pm_lock
+    def api_scenario_map_full():
+        scenario = pm.project.current_scenario
+        baseline_scenario =  pm.project.current_region.scenarios['AS-IS']
+
+        builder = ScenarioMapPatchBuilder(scenario, baseline_scenario)
+        return success(builder.full_payload())
+
+    @app.post("/api/scenario-map/patch/ui-state")
     @json_endpoint
-    def api_map(data):
-        ui_state = data.get("ui_state")
-        html = pm.get_map_html(ui_state)
-        return success(html)
+    @with_pm_lock
+    def api_scenario_map_patch_ui_state(data):
+        scenario = pm.project.current_scenario
+        baseline_scenario = pm.project.current_region.scenarios['AS-IS']
+
+        builder = ScenarioMapPatchBuilder(scenario, baseline_scenario)
+        return success(builder.set_ui_state(data or {}))
 
 
     # ----------------------------------------------------
-    # Solver
+    # solver
 
     @app.post("/api/solve_model")
     @with_pm_lock
-    def api_solve_model():
-        task_id = start_background_task(pm.solve_scenario)
+    @json_endpoint
+    def api_solve_model(data):
+        solve_hubs = data.get("solve_hubs")
+        overutilization = data.get("overutilization")
+        max_stops = data.get("max_stops")
+        task_id = start_background_task(pm.solve_scenario, solve_hubs, overutilization, max_stops)
         return success(task_id)
 
 
@@ -483,26 +510,39 @@ def create_app():
         data = pm.get_shippers_cofor_per_network()
         return success(data)
 
-
     @app.post("/api/swap_hub/apply_thresholds_preview")
     @json_endpoint
     def api_swap_apply_thresholds(data):
         swapped = pm.preview_swap_threshold(data.get("thresholds"))
         return success(swapped)
 
-
     @app.post("/api/swap_hub")
     @json_endpoint
     @with_pm_lock
     def api_swap_hub(data):
-        shippers_without_tariff = pm.move_hub_to_direct(data.get("direct_cofors_to_add")),
-        shippers_without_hub = pm.move_direct_to_hub(data.get("hub_cofors_to_add"))
+        hub_to_direct_result = pm.move_hub_to_direct(data.get("direct_cofors_to_add") or [])
+        direct_to_hub_result = pm.move_direct_to_hub(data.get("hub_cofors_to_add") or [])
+
         pm.project.refresh_tariffs_scenario_hubs()
-        return success(
-            {'shippers_without_hub': shippers_without_hub,
-             'shippers_without_tariff': shippers_without_tariff}
+
+        map_patch = combine_patches(
+            build_scenario_map_patch_from_changes(
+                pm.project,
+                hub_to_direct_result.get("map_changes", {}),
+            ),
+            build_scenario_map_patch_from_changes(
+                pm.project,
+                direct_to_hub_result.get("map_changes", {}),
+            ),
         )
 
+        return success(
+            {
+                "shippers_without_hub": direct_to_hub_result.get("failed", []),
+                "shippers_without_tariff": hub_to_direct_result.get("failed", []),
+                "mapPatch": map_patch,
+            }
+        )
 
     @app.get("/api/swap_hub/available_hubs")
     def api_swap_available_hubs():
@@ -514,12 +554,25 @@ def create_app():
     @json_endpoint
     @with_pm_lock
     def api_swap_resolve(data):
-        for decision in data.get("decisions"):
+        map_patch = make_patch()
+
+        for decision in data.get("decisions") or []:
             if decision.get("action") == "confirm_manual_swap":
                 shipper_cofor = decision.get("shipper")
                 hub_cofor = decision.get("selectedHub")
-                pm.manual_move_direct_to_hub(shipper_cofor, hub_cofor)
-        return success()
+
+                result = pm.manual_move_direct_to_hub(shipper_cofor, hub_cofor)
+
+                if isinstance(result, dict) and "map_changes" in result:
+                    map_patch = combine_patches(
+                        map_patch,
+                        build_scenario_map_patch_from_changes(
+                            pm.project,
+                            result["map_changes"],
+                        ),
+                    )
+
+        return success({"mapPatch": map_patch})
 
 
     # ----------------------------------------------------
@@ -546,7 +599,6 @@ def create_app():
             "target_routes": target_routes,
         })
 
-
     @app.post("/api/lock_block/move")
     @json_endpoint
     @with_pm_lock
@@ -555,15 +607,30 @@ def create_app():
         mode = data.get("mode")
         shippers_key = _normalize_route_key(data.get("route_key"))
         flow_direction = data.get("flow_direction")
+
         action_map = {
-                ("left", "lock"): pm.lock_route,
-                ("left", "block"): pm.block_route,
-                ("right", "lock"): pm.unlock_route,
-                ("right", "block"): pm.unblock_route,
-            }
+            ("left", "lock"): pm.lock_route,
+            ("left", "block"): pm.block_route,
+            ("right", "lock"): pm.unlock_route,
+            ("right", "block"): pm.unblock_route,
+        }
+
         action = action_map.get((from_side, mode))
-        action(shippers_key, flow_direction)
-        return success()
+        if action is None:
+            raise ValueError(f"Invalid lock/block action: {from_side=} {mode=}")
+
+        route = action(shippers_key, flow_direction)
+
+        map_patch = build_scenario_map_patch_from_changes(
+            pm.project,
+            {
+                "upserted_direct_routes": [route],
+            },
+        )
+
+        return success({
+            "mapPatch": map_patch,
+        })
 
 
     @app.get("/api/lock_block/suppliers")

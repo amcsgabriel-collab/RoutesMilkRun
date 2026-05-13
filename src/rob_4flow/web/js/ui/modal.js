@@ -1,6 +1,6 @@
 import { loadHtml } from '../utils.js';
 import { apiPost, apiGet } from "../api.js";
-import { showProjectPage } from "../views/project.js";
+import { showProjectPage } from "../views/project/project.js";
 import { setAppBusy } from "./overlay.js";
 
 const backdrop = () => document.getElementById("modal-backdrop");

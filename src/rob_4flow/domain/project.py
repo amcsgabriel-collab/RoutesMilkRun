@@ -1,5 +1,5 @@
 """
-Project object: Current "Solver", should contain all the context data, the specified GRAF file, all the domain objects
+Project object: Current "solver", should contain all the context data, the specified GRAF file, all the domain objects
 created, should manage all the scenarios and regions, and should enable continuing with an optimization after closing
 (saved states).
 
@@ -32,7 +32,8 @@ class SourcingRegion:
 class ProjectContext:
     plant: Plant
     vehicles: list[Vehicle]
-    tariffs_service: Any
+    tariff_service: Any
+    hub_assignment_service: Any
     regions: dict[str, SourcingRegion]
 
 
@@ -118,6 +119,6 @@ class Project:
 
     def refresh_tariffs_scenario_hubs(self):
         for hub in self.current_scenario.get_in_use_hubs():
-            self.context.tariffs_service.assign_ltl_routes(hub.parts_first_leg_routes)
+            self.context.tariff_service.assign_ltl_routes(hub.parts_first_leg_routes)
             if hub.has_empties_flow:
-                self.context.tariffs_service.assign_ltl_routes(hub.empties_first_leg_routes)
+                self.context.tariff_service.assign_ltl_routes(hub.empties_first_leg_routes)

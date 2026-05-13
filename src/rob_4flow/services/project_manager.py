@@ -1,14 +1,13 @@
 from typing import Optional, Callable
 
+from .solver.coordinator import SolverCoordinator
 from ..domain.exceptions import CannotEditBaselineError, UnsavedScenarioError
 from ..domain.project import Project
 from .graf_exporter import export_graf
 from .hub_swap_service import HubSwapService
 from .kpi_exporter import KpiExporter
-from .map_generator import generate_scenario_map_html
 from .project_service import ProjectService
 from .scenario_service import ScenarioService
-from .solver import Solver
 from ..domain.shipper import Shipper
 
 LogFn = Callable[[str], None]
@@ -85,10 +84,7 @@ class ProjectManager:
                 "name": "Not allocated",
             }
 
-        shippers = (
-                self.current_region.scenarios["AS-IS"].direct_shippers
-                | self.current_region.scenarios["AS-IS"].hub_shippers
-        ).values()
+        shippers = self.current_scenario.shippers
 
         return [
             {
@@ -98,7 +94,7 @@ class ProjectManager:
                     "empties": allocation_summary(shipper, "empties"),
                 },
             }
-            for shipper in shippers
+            for shipper in shippers.values()
         ]
 
 
@@ -115,20 +111,24 @@ class ProjectManager:
     def lock_route(self, shippers_key, flow_direction):
         route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.lock_route(route)
+        return route
 
     def lock_route_manual(self, shippers_key, vehicle_id, flow_direction='parts'):
         route = self.current_scenario.find_route(shippers_key)
         if not route:
             route = self.project.create_route(shippers_key, vehicle_id, flow_direction)
+
         self.current_scenario.lock_route(route)
 
     def unlock_route(self, shippers_key, flow_direction):
         route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.unlock_route(route)
+        return route
 
     def block_route(self, shippers_key, flow_direction):
         route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.block_route(route)
+        return route
 
     def block_route_manual(self, shippers_key, vehicle_id, flow_direction='parts'):
         route = self.current_scenario.find_route(shippers_key)
@@ -139,71 +139,94 @@ class ProjectManager:
     def unblock_route(self, shippers_key, flow_direction):
         route = self.current_scenario.find_route(shippers_key, flow_direction)
         self.current_scenario.unblock_route(route)
+        return route
 
     # ________________________________________________________________
     # HUB / DIRECT NETWORK SWAP INTERFACE
     def get_shippers_cofor_per_network(self):
         return {
-            'baseline_direct': list(self.project.current_region.scenarios['AS-IS'].hub_swap_direct_shippers),
-            'baseline_hub': list(self.project.current_region.scenarios['AS-IS'].hub_shippers.keys()),
-            'current_direct': list(self.project.current_scenario.hub_swap_direct_shippers),
-            'current_hub': list(self.project.current_scenario.hub_shippers.keys()),
+            "baseline_direct": list(self.project.current_region.scenarios["AS-IS"].hub_swap_direct_shippers),
+            "baseline_hub": list(self.project.current_region.scenarios["AS-IS"].hub_shippers.keys()),
+            "current_direct": list(self.project.current_scenario.hub_swap_direct_shippers),
+            "current_hub": list(self.project.current_scenario.hub_shippers.keys()),
         }
 
     def preview_swap_threshold(self, thresholds):
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        return self.hub_swap_service.preview_swap_threshold(self.current_scenario, thresholds)
 
-    def move_hub_to_direct(self, hub_to_move: list[str]) -> list[str]:
+        return self.hub_swap_service.preview_swap_threshold(
+            self.current_scenario,
+            thresholds,
+        )
+
+    def move_hub_to_direct(self, hub_to_move: list[str]) -> dict:
         """
-        Moves the selected list of shippers from the Hub network to Direct
+        Moves the selected list of shippers from the Hub network to Direct.
         :param hub_to_move: List of Hub shipper COFORs to move.
+        :return: Dict containing failed shippers and map change hints.
         """
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        failed_shippers = self.hub_swap_service.move_hub_shippers_to_direct(self.project, hub_to_move)
-        return failed_shippers
 
-    def move_direct_to_hub(self, direct_to_move: list[str]) -> list[str]:
+        return self.hub_swap_service.move_hub_shippers_to_direct(
+            self.project,
+            hub_to_move or [],
+        )
+
+    def move_direct_to_hub(self, direct_to_move: list[str]) -> dict:
         """
-        Tries to move the selected list of shippers from the Direct network to Hub. In case no Hub can be assigned,
-        returns the shipper to be used in the "manual hub assignment" flow.
+        Tries to move the selected list of shippers from the Direct network to Hub.
+        In case no Hub can be assigned, returns the shipper to be used in the
+        manual hub assignment flow.
         :param direct_to_move: List of Direct shipper COFORs to move.
-        :return: List of shipper COFORs that couldn't be assigned to a Hub.
+        :return: Dict containing failed shippers and map change hints.
         """
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
-        shippers_without_hub = self.hub_swap_service.move_direct_shippers_to_hub(self.project, direct_to_move)
-        return shippers_without_hub
 
-    def manual_move_direct_to_hub(self, direct_to_move: str, assigned_hub: str) -> None:
+        return self.hub_swap_service.move_direct_shippers_to_hub(
+            self.project,
+            direct_to_move or [],
+        )
+
+    def manual_move_direct_to_hub(self, direct_to_move: str, assigned_hub: str) -> dict:
         """
         Moves the specified shipper from the direct network to the assigned Hub.
         :param direct_to_move: COFOR of the shipper to be moved.
         :param assigned_hub: COFOR of the hub it was assigned to.
+        :return: Dict containing operation status and map change hints.
         """
-        shipper = self.project.current_scenario.direct_shippers[direct_to_move]
-        hub = self.project.current_scenario.get_hub_by_cofor(assigned_hub)
-        self.hub_swap_service.move_direct_shipper_to_hub(self.project, shipper, hub)
-
-
-    # ________________________________________________________________
-    # SOLVER
-    def solve_scenario(self, progress_tracker: LogFn):
         if self.current_scenario.is_baseline:
             raise CannotEditBaselineError()
 
-        solver = Solver(self.project, progress_tracker)
-        self.current_scenario.draft_trips = solver.run()
+        shipper = self.project.current_scenario.direct_shippers[direct_to_move]
+        hub = self.project.current_scenario.get_hub_by_cofor(assigned_hub)
+
+        return self.hub_swap_service.move_direct_shipper_to_hub(
+            self.project,
+            shipper,
+            hub,
+        )
 
     # ________________________________________________________________
-    # MAP
-    def get_map_html(self, ui_state: dict):
-        return generate_scenario_map_html(
-            scenario=self.current_scenario,
-            baseline_scenario=self.current_region.scenarios['AS-IS'],
-            ui_state=ui_state)
+    # SOLVER
+    def solve_scenario(self, solve_hubs, overutilization, max_stops, progress_tracker: LogFn, ):
+        if self.current_scenario.is_baseline:
+            raise CannotEditBaselineError()
+
+        solver = SolverCoordinator(
+            project=self.project,
+            progress_tracker=progress_tracker,
+            solve_hubs=solve_hubs,
+            overutilization=overutilization,
+            max_stops=max_stops
+        )
+        trips, hubs = solver.run()
+
+        self.current_scenario.draft_trips = trips
+        if solve_hubs:
+            self.current_scenario.draft_hubs = hubs
 
     # ________________________________________________________________
     # KPIs & GRAF Export

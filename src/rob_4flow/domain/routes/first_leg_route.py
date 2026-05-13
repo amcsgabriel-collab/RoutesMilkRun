@@ -39,6 +39,7 @@ class FirstLegRoute(Route):
         self.shipper = shipper
         self.tariff: LtlTariff | HubTariff | None = None
         self.transport_concept = "LTL"
+        self.shipper.assigned_hub_cofor = self.hub.cofor
 
     def __hash__(self):
         return hash((self.demand.shipper, self.demand.flow_direction))
@@ -65,6 +66,16 @@ class FirstLegRoute(Route):
     @property
     def destination(self):
         return self.hub
+
+    @property
+    def shippers_keyed_summary(self):
+        return {
+            "route_name": f"G-{self.shipper.cofor}-{self.hub.cofor}",
+            "network": "hub",
+            "key": self.shipper.cofor,
+            "flow_direction": self.demand.flow_direction,
+            "sequence": [self.shipper.cofor],
+        }
 
     def export_dataframe(self, *args, **kwargs):
         pass

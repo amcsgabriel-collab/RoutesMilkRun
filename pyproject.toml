@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rob_4flow"
-version = "0.1.2"
+version = "0.1.3"
 description = "Your package description"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -19,7 +19,8 @@ dependencies = [
     "folium",
     "pulp",
     "openpyxl",
-    "pyxlsb"
+    "pyxlsb",
+    "xlsxwriter"
 ]
 
 [tool.setuptools.packages.find]

@@ -47,9 +47,9 @@ class HubAggregateDemand:
     def count_of_stops(self):
         return 0
 
-    @property
-    def overutilization(self):
-        return 1.0
+    @staticmethod
+    def overutilization_rate(non_rounded_trucks: float) -> float:
+        return 0.0
 
 
 class MilkrunPatternDemand:
@@ -93,9 +93,8 @@ class MilkrunPatternDemand:
     def deviation(self):
         return self.pattern.deviation
 
-    @property
-    def overutilization(self):
-        return self.pattern.overutilization
+    def overutilization_rate(self, non_rounded_trucks: float) -> float:
+        return self.pattern.overutilization_rate(non_rounded_trucks)
 
 
 class ShipperDemand:
@@ -133,7 +132,7 @@ class ShipperDemand:
     def starting_point(self):
         return self.shipper
 
-    @property
-    def overutilization(self):
-        return 1.0
+    @staticmethod
+    def overutilization_rate(non_rounded_trucks: float) -> float:
+        return 0.0
 

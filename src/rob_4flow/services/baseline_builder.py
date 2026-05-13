@@ -3,6 +3,7 @@ from typing import Optional, Callable
 
 import pandas as pd
 
+from .hub_assignment import HubAssignmentService
 from ..domain.domain_algorithms import make_haversine_cache
 from ..domain.exceptions import (
     ShippersWithoutLocationsError,
@@ -286,7 +287,8 @@ class BaselineBuilder:
             trips=global_trips,
             hubs=global_hubs,
             is_baseline=True,
-            kpi_vehicles=self.kpi_vehicles_count
+            kpi_vehicles=self.kpi_vehicles_count,
+            shippers=self.hub_shippers_by_cofor | self.direct_shippers_by_cofor,
         )
         global_baseline.refresh_lock_block_available_routes()
 
@@ -299,11 +301,14 @@ class BaselineBuilder:
             scenarios={BASELINE_SCENARIO: global_baseline},
         )
 
+        hub_assignment_service = HubAssignmentService(self.plant.name, regions[ALL_REGIONS].scenarios['AS-IS'].get_in_use_hubs())
+
         self._log("Creating Project Context...")
         return ProjectContext(
             plant=self.plant,
             vehicles=[v for v in self.vehicles.values()],
-            tariffs_service=self.tariffs_service,
+            tariff_service=self.tariffs_service,
+            hub_assignment_service=hub_assignment_service,
             regions=regions,
         )
 
@@ -386,16 +391,16 @@ class BaselineBuilder:
         sellers = SellerRepository(self.hub_demand_database).get_by_shipper()
         self.hub_carriers = CarrierRepository(self.hub_demand_database).get_all_hub()
 
-        hub_shippers_by_cofor = ShipperRepository(aggregated_demand_by_shipper).get_all(
+        self.hub_shippers_by_cofor = ShipperRepository(aggregated_demand_by_shipper).get_all(
             sellers_by_shipper=sellers,
             carriers=self.hub_carriers["first_leg"],
             are_hub_shippers=True,
         )
-        verify_coordinates(hub_shippers_by_cofor)
-        self.assign_carrier_to_hub_shipper({s for s in hub_shippers_by_cofor.values()})
+        verify_coordinates(self.hub_shippers_by_cofor)
+        self.assign_carrier_to_hub_shipper({s for s in self.hub_shippers_by_cofor.values()})
 
         hubs = HubRepository(self.hub_demand_database).get_all(
-            shippers=hub_shippers_by_cofor,
+            shippers=self.hub_shippers_by_cofor,
             carriers=self.hub_carriers,
             vehicles=self.vehicles,
             plant=self.plant,
@@ -461,13 +466,13 @@ class BaselineBuilder:
             self.direct_demand_database
         ).aggregate_database_by_shipper()
 
-        direct_shippers_by_cofor = ShipperRepository(
+        self.direct_shippers_by_cofor = ShipperRepository(
             aggregated_direct_demand_by_shipper
         ).get_all(
             carriers=self.direct_carriers,
             sellers_by_shipper=direct_sellers,
         )
-        verify_coordinates(shippers=direct_shippers_by_cofor)
+        verify_coordinates(shippers=self.direct_shippers_by_cofor)
 
         aggregated_direct_demand_by_route = DemandDataTransformer(
             self.direct_demand_database
@@ -477,7 +482,7 @@ class BaselineBuilder:
             aggregated_direct_demand_by_route,
             distance_function=make_haversine_cache(),
         ).get_all(
-            shippers_by_cofor=direct_shippers_by_cofor,
+            shippers_by_cofor=self.direct_shippers_by_cofor,
             plant=self.plant,
         )
 
@@ -487,7 +492,7 @@ class BaselineBuilder:
                 for vehicle_set in route_patterns_by_vehicle.values()
                 for pattern in vehicle_set
             ],
-            shippers=[s for s in direct_shippers_by_cofor.values()],
+            shippers=[s for s in self.direct_shippers_by_cofor.values()],
         )
 
         direct_routes = DirectRouteRepository(
@@ -596,10 +601,16 @@ class BaselineBuilder:
     ) -> dict[str, SourcingRegion]:
         trips_by_region = defaultdict(set)
         hubs_by_region = defaultdict(set)
+        shippers_by_region = defaultdict(dict)
 
         for trip in global_baseline.trips:
             region = self._trip_owner_region(trip)
             trips_by_region[region].add(trip)
+
+            for route in (trip.parts_route, trip.empties_route):
+                if route is not None:
+                    for shipper in route.demand.pattern.shipper_allocation:
+                        shippers_by_region[region][shipper.cofor] = shipper
 
         for hub in global_baseline.hubs:
             shipper_regions = {
@@ -611,6 +622,9 @@ class BaselineBuilder:
             for region in shipper_regions:
                 hubs_by_region[region].add(RegionalHubView(core_hub=hub, region=region))
 
+                for shipper in hub.shippers:
+                    shippers_by_region[region][shipper.cofor] = shipper
+
         region_names = sorted(set(trips_by_region.keys()) | set(hubs_by_region.keys()))
         regions: dict[str, SourcingRegion] = {}
 
@@ -621,6 +635,7 @@ class BaselineBuilder:
                 hubs=hubs_by_region[region_name],
                 is_baseline=True,
                 kpi_vehicles=self.kpi_vehicles_count,
+                shippers=shippers_by_region[region_name],
             )
             baseline_scenario.refresh_lock_block_available_routes()
 

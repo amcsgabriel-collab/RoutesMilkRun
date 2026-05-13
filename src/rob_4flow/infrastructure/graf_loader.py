@@ -1,7 +1,7 @@
 import pandas as pd
 from pyxlsb import open_workbook
 
-from ..settings import GRAF_TEMPLATE_HEADER_ROW, get_column_sequence_graf_format
+from ..settings import GRAF_TEMPLATE_HEADER_ROW, get_column_sequence_graf_format, get_graf_dtype_map
 
 TARIFFS_RELEVANT_COLUMNS = [
     'Unique_KEY', 'iTMS_Mode', 'Singletrip', 'non-Singletrip',
@@ -29,8 +29,9 @@ class GrafLoader:
 
         sheet_name = "Direct RAF Template" if direct_or_hub == "Direct" else "GRP RAF Template"
         columns = get_column_sequence_graf_format(str.lower(direct_or_hub))
+        dtypes = get_graf_dtype_map(str.lower(direct_or_hub))
         header_row = GRAF_TEMPLATE_HEADER_ROW
-        return self.read_graf_file(sheet_name, header_row, columns)
+        return self.read_graf_file(sheet_name, header_row, columns, dtypes)
 
     def load_tariffs_database(self):
         sheet_name = "PriceSheet"
@@ -88,7 +89,8 @@ class GrafLoader:
             self,
             sheet_name: str,
             header_row: int,
-            columns: list[str]
+            columns: list[str],
+            dtype: dict | None = None
     ) -> pd.DataFrame:
 
         print(f'Reading file: {self.graf_path} on sheet {sheet_name}.')
@@ -97,7 +99,8 @@ class GrafLoader:
                 io=self.graf_path,
                 sheet_name=sheet_name,
                 header=header_row,
-                usecols=columns
+                usecols=columns,
+                dtype=dtype
             )
             return database
         except FileNotFoundError:

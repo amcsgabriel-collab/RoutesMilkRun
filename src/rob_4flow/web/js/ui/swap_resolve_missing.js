@@ -11,13 +11,11 @@
  */
 
 import { closeModal } from "./modal.js";
-import { showMap } from "../views/project.js";
 import { apiPost } from "../api.js";
 
 function onAllSuppliersHandled(decisionCache) {
   console.log("All suppliers handled:", decisionCache);
   closeModal();
-  showMap();
 }
 
 

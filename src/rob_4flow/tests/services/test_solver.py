@@ -277,7 +277,7 @@ def test_get_roundtrip_savings_by_group_populates_dict(solver, base_objects, mon
     solver.roundtrip_groups = {group}
 
     monkeypatch.setitem(
-        solver.tariffs_service.ftl_tariffs,
+        solver.tariff_service.ftl_tariffs,
         (group[0], group[1], 35, group[2], obj.plant.cofor),
         DummyTariff(42),
     )

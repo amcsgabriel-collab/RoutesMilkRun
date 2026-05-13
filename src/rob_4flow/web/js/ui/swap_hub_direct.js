@@ -1,7 +1,7 @@
 import { loadHtml, escapeHtml } from "../utils.js";
 import { openModal, closeModal } from "./modal.js";
 import { apiPost, apiGet } from "../api.js";
-import { showMap, refreshScenarioData } from "../views/project.js"
+import { applyMapPatchOrRefresh } from "../views/project/scenario.js";
 import { ManualSwapFlow } from "./swap_resolve_missing.js";
 
 
@@ -23,7 +23,7 @@ let swapState = {
     volume: null,
     loading_meters: null
   },
-  autoMoved: {
+  moved: {
     directToHub: new Set(),
     hubToDirect: new Set()
   }
@@ -40,12 +40,12 @@ export async function openSwapModal() {
   wireInputCheckbox();
 }
 
+
 /**
  * Coordinates the wiring and setup of the modal
  */
 async function wireSwapModal() {
-
-  const data = await apiGet("/api/swap_hub/load")
+  const data = await apiGet("/api/swap_hub/load");
 
   swapState = {
     baseline: {
@@ -71,10 +71,16 @@ async function wireSwapModal() {
     }
   };
 
-  document.getElementById("btn-to-hub").addEventListener("click", 
-    () => {moveSelected("direct", "hub", "direct-list")});
-  document.getElementById("btn-to-direct").addEventListener("click", 
-    () => {moveSelected("hub", "direct", "hub-list")});
+  document.getElementById("btn-to-hub").addEventListener(
+    "click",
+    () => moveSelected("direct", "hub", "direct-list")
+  );
+
+  document.getElementById("btn-to-direct").addEventListener(
+    "click",
+    () => moveSelected("hub", "direct", "hub-list")
+  );
+
   document.getElementById("btn-reset").addEventListener("click", resetToInitial);
   document.getElementById("btn-baseline").addEventListener("click", revertToBaseline);
   document.getElementById("btn-set-thresholds").addEventListener("click", toggleThresholdPanel);
@@ -82,14 +88,16 @@ async function wireSwapModal() {
   document.getElementById("btn-close-thresholds").addEventListener("click", toggleThresholdPanel);
   document.getElementById("swap-close").addEventListener("click", closeModal);
   document.getElementById("swap-confirm").addEventListener("click", confirmSwap);
+
   renderLists();
-};
+}
+
 
 function renderList(containerId, items, movedSet) {
   const el = document.getElementById(containerId);
 
   el.innerHTML = items.map(shipper => `
-    <option 
+    <option
       value="${escapeHtml(shipper)}"
       class="${movedSet.has(shipper) ? "swap-item-moved" : ""}"
     >
@@ -98,8 +106,8 @@ function renderList(containerId, items, movedSet) {
   `).join("");
 }
 
+
 function renderLists() {
-  // Toggle "moved" state.
   syncAllMovedState();
 
   renderList(
@@ -115,28 +123,19 @@ function renderLists() {
   );
 }
 
+
 // --------------------------------------
 // ------------  SWAPPING  --------------
 // --------------------------------------
 
-/**
- * Move selected element from one list to another, given the "from" and "to" lists and the selection ID.
- * 
- * @param {String} fromKey 
- * @param {String} toKey 
- * @param {String} selectId 
- * @returns 
- */
 function moveSelected(fromKey, toKey, selectId) {
   const selected = getSelected(selectId);
 
   if (!selected.length) return;
 
-  // Remove selection from "FROM" list
   swapState.current[fromKey] =
     swapState.current[fromKey].filter(s => !selected.includes(s));
 
-  // Add selection to "TO" list  
   swapState.current[toKey] = [
     ...swapState.current[toKey],
     ...selected
@@ -144,6 +143,7 @@ function moveSelected(fromKey, toKey, selectId) {
 
   renderLists();
 }
+
 
 function syncAllMovedState() {
   swapState.moved.directToHub.clear();
@@ -184,12 +184,14 @@ function syncMovedState(shipper) {
   }
 }
 
+
 function getSelected(containerId) {
   const select = document.getElementById(containerId);
 
   return Array.from(select.selectedOptions)
     .map(opt => opt.value);
 }
+
 
 function resetToInitial() {
   swapState.current.direct = [...swapState.initial.direct];
@@ -199,9 +201,11 @@ function resetToInitial() {
     volume: null,
     loading_meters: null
   };
+
   renderLists();
   resetThresholdInputs();
 }
+
 
 function revertToBaseline() {
   swapState.current.direct = [...swapState.baseline.direct];
@@ -211,8 +215,25 @@ function revertToBaseline() {
     volume: null,
     loading_meters: null
   };
+
   renderLists();
   resetThresholdInputs();
+}
+
+
+function resetThresholdInputs() {
+  ["chk-weight", "chk-volume", "chk-loading"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+
+  ["inp-weight", "inp-volume", "inp-loading"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = "";
+      el.disabled = true;
+    }
+  });
 }
 
 
@@ -223,8 +244,10 @@ function revertToBaseline() {
 function toggleThresholdPanel() {
   const panel = document.getElementById("swap-threshold-panel");
   if (!panel) return;
+
   panel.classList.toggle("hidden");
 }
+
 
 function wireInputCheckbox() {
   const chkWeight = document.getElementById("chk-weight");
@@ -240,6 +263,7 @@ function wireInputCheckbox() {
   toggleThresholdInput(chkLoading, inpLoading);
 }
 
+
 function toggleThresholdInput(chk, inp) {
   if (!chk || !inp) return;
 
@@ -251,6 +275,7 @@ function toggleThresholdInput(chk, inp) {
   chk.addEventListener("change", sync);
   sync();
 }
+
 
 function getActiveThresholds() {
   const thresholds = {
@@ -265,6 +290,7 @@ function getActiveThresholds() {
 
   return thresholds;
 }
+
 
 function addThresholdIfChecked(thresholds, chkId, inputId, key) {
   const chk = document.getElementById(chkId);
@@ -282,6 +308,7 @@ function addThresholdIfChecked(thresholds, chkId, inputId, key) {
   thresholds[key] = value;
 }
 
+
 function validate_thresholds(thresholds) {
   for (const key in thresholds) {
     if (thresholds[key] === "invalid") {
@@ -289,73 +316,99 @@ function validate_thresholds(thresholds) {
       return false;
     }
   }
+
   return true;
 }
 
+
 async function applyThresholds() {
-    const thresholds = getActiveThresholds()
-    if (!validate_thresholds(thresholds)) return;
-    try{
-        const data = await apiPost("/api/swap_hub/apply_thresholds_preview", {thresholds });
-        swapState.thresholds = thresholds;
-        swapState.current.direct = [...data.direct];
-        swapState.current.hub = [...data.hub];
-        renderLists();
-        toggleThresholdPanel();
-        alert("Thresholds successfully applied.")
-    } catch(e) {
-        if (e.type === 'CannotEditBaselineError') {
-            alert(e.message);
-            return;
-        }
-        throw e;
+  const thresholds = getActiveThresholds();
+
+  if (!validate_thresholds(thresholds)) return;
+
+  try {
+    const data = await apiPost("/api/swap_hub/apply_thresholds_preview", { thresholds });
+
+    swapState.thresholds = thresholds;
+    swapState.current.direct = [...data.direct];
+    swapState.current.hub = [...data.hub];
+
+    renderLists();
+    toggleThresholdPanel();
+
+    alert("Thresholds successfully applied.");
+  } catch (e) {
+    if (e.type === "CannotEditBaselineError") {
+      alert(e.message);
+      return;
     }
+
+    throw e;
+  }
 }
+
 
 // --------------------------------------
 // ------------  CONFIRM  ---------------
 // --------------------------------------
 
 async function confirmSwap() {
-    try {
-        const res = await apiPost("/api/swap_hub", {
-            direct_cofors_to_add: Array.from(swapState.moved.hubToDirect),
-            hub_cofors_to_add: Array.from(swapState.moved.directToHub),
-        });
+  try {
+    const res = await apiPost("/api/swap_hub", {
+      direct_cofors_to_add: Array.from(swapState.moved.hubToDirect),
+      hub_cofors_to_add: Array.from(swapState.moved.directToHub),
+    });
 
-        const suppliers_wo_tariffs = res.shippers_without_tariff;
-        if (suppliers_wo_tariffs && suppliers_wo_tariffs.length > 0) {
-          alert("Warning: Failed to move following suppliers to direct network due to missing tariffs:\n\n" + suppliers_wo_tariffs.join(", "));
-        }
-
-        const suppliers_wo_hubs = res.shippers_without_hub;
-        if (suppliers_wo_hubs && suppliers_wo_hubs.length > 0) {
-          const html = await loadHtml("../views_html/swap_resolve_missing.html");
-          openModal(html);
-          const availableHubs = await apiGet("/api/swap_hub/available_hubs");
-          const manualSwapFlow = new ManualSwapFlow(suppliers_wo_hubs, availableHubs);
-          manualSwapFlow.init();
-          await manualSwapFlow.run();
-          alert("Swap resolved successfully.");
-          showMap();
-          refreshScenarioData();
-        } else {
-          alert("Swap applied successfully.");
-          closeModal();
-          showMap();
-          refreshScenarioData();
-        }
-        
-    } catch(e) {
-        if (e.type === 'CannotEditBaselineError') {
-            alert(e.message);
-            return;
-        }
-        if (e.type === "HubKeyNotMapped") {
-            alert(e.message);
-            return;
-        } else {
-            throw e;
-        }
+    if (res.mapPatch) {
+      await applyMapPatchOrRefresh(res.mapPatch);
+      await refreshScenarioData()
     }
+
+    const suppliers_wo_tariffs = res.shippers_without_tariff;
+    if (suppliers_wo_tariffs && suppliers_wo_tariffs.length > 0) {
+      alert(
+        "Warning: Failed to move following suppliers to direct network due to missing tariffs:\n\n" +
+        suppliers_wo_tariffs.join(", ")
+      );
+    }
+
+    const suppliers_wo_hubs = res.shippers_without_hub;
+    if (suppliers_wo_hubs && suppliers_wo_hubs.length > 0) {
+      const html = await loadHtml("../views_html/swap_resolve_missing.html");
+
+      openModal(html);
+
+      const availableHubs = await apiGet("/api/swap_hub/available_hubs");
+      const manualSwapFlow = new ManualSwapFlow(suppliers_wo_hubs, availableHubs);
+
+      manualSwapFlow.init();
+
+      const resolveResult = await manualSwapFlow.run();
+
+      if (resolveResult?.mapPatch) {
+        await applyMapPatchOrRefresh(resolveResult.mapPatch);
+        await refreshScenarioData()
+      }
+
+      alert("Swap resolved successfully.");
+      closeModal();
+      return;
+    }
+
+    alert("Swap applied successfully.");
+    closeModal();
+
+  } catch (e) {
+    if (e.type === "CannotEditBaselineError") {
+      alert(e.message);
+      return;
+    }
+
+    if (e.type === "HubKeyNotMapped") {
+      alert(e.message);
+      return;
+    }
+
+    throw e;
+  }
 }

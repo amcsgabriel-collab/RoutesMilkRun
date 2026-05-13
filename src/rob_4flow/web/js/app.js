@@ -1,11 +1,10 @@
 // Configures the "core" of the application, which includes the main window, the project menu and some other global actions.
 
-import { showProjectPage } from "./views/project.js";
 import { showStartPage } from "./views/start.js";
 import { openCreateModal } from "./ui/create_modal.js"
 import { apiPost } from "./api.js"
 import { closeModal } from "./ui/modal.js";
-import { refreshProjectData } from "./views/project.js"
+import { refreshProjectData, showProjectPage } from "./views/project/project.js"
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   // wire global menu.

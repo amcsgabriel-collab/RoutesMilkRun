@@ -39,14 +39,16 @@ class Scenario:
 
     name: str
 
+    shippers: dict[str, Shipper]
+
     hubs: set[HubLike] = field(default_factory=set)
     draft_hubs: set[HubLike] | None = None
 
     trips: set[Trip] = field(default_factory=set)
     draft_trips: set[Trip] | None = None
-    lock_block_available_routes: list[DirectRoute] = field(default_factory=list)
-    blocked_routes: list[DirectRoute] = field(default_factory=list)
-    locked_routes: list[DirectRoute] = field(default_factory=list)
+    lock_block_available_routes: list[Route] = field(default_factory=list)
+    blocked_routes: list[Route] = field(default_factory=list)
+    locked_routes: list[Route] = field(default_factory=list)
 
     is_baseline: bool = field(default=False)
     kpi_vehicles: int = 0
@@ -63,6 +65,10 @@ class Scenario:
         if not self.draft_trips:
             self.draft_trips = {t.copy() for t in self.trips}
 
+    def create_draft_hubs(self) -> None:
+        if not self.draft_hubs:
+            self.draft_hubs = {copy.deepcopy(h) for h in self.hubs}
+
     def get_in_use_hubs(self):
         """ Get draft hubs if they exist, else get saved hubs. """
         if self.draft_hubs:
@@ -71,50 +77,83 @@ class Scenario:
             return self.hubs
 
     def refresh_lock_block_available_routes(self):
-        """ Refresh the list of current routes available to be blocked / locked. """
-        self.lock_block_available_routes = [
-            trip.parts_route
+        """Refresh the list of current routes available to be blocked / locked."""
+        direct_routes = [
+            route
             for trip in self.get_in_use_trips()
-            if trip.parts_route is not None
-            and trip.parts_route not in self.locked_routes
-               and trip.parts_route not in self.blocked_routes
-        ] + [
-            trip.empties_route
-            for trip in self.get_in_use_trips()
-            if trip.empties_route is not None
-            and trip.empties_route not in self.locked_routes
-               and trip.empties_route not in self.blocked_routes
+            for route in (trip.parts_route, trip.empties_route)
+            if route is not None
+               and route not in self.locked_routes
+               and route not in self.blocked_routes
         ]
+
+        hub_routes = [
+            route
+            for hub in self.get_in_use_hubs()
+            for route in (
+                    list(hub.parts_first_leg_routes)
+                    + list(hub.empties_first_leg_routes)
+            )
+            if route is not None
+               and route not in self.locked_routes
+               and route not in self.blocked_routes
+        ]
+
+        self.lock_block_available_routes = direct_routes + hub_routes
         return self.lock_block_available_routes
 
-    def find_route(self, route_shippers_key, flow_direction) -> DirectRoute | None:
-        """Search for the specified route by the shippers it contains, in the specified direction."""
-        for t in self.get_in_use_trips():
-            route = t.parts_route if flow_direction == "parts" else t.empties_route
-            if route is not None and route.demand.pattern.shippers_key == route_shippers_key:
-                return route
-        raise KeyError(f"Route requested does not exist.")
+    def find_route(self, route_shippers_key, flow_direction) -> Route | None:
+        """Search for the specified route by shippers/key and flow direction."""
+        flow_direction = flow_direction.lower()
 
-    def lock_route(self, route: DirectRoute) -> None:
+        for trip in self.get_in_use_trips():
+            route = trip.parts_route if flow_direction == "parts" else trip.empties_route
+            if (
+                    route is not None
+                    and route.demand.pattern.shippers_key == route_shippers_key
+            ):
+                return route
+
+        for hub in self.get_in_use_hubs():
+            first_leg_routes = (
+                hub.parts_first_leg_routes
+                if flow_direction == "parts"
+                else hub.empties_first_leg_routes
+            )
+
+            for route in first_leg_routes:
+                if route.demand.shipper.cofor == route_shippers_key:
+                    return route
+
+                if frozenset([route.demand.shipper.cofor]) == route_shippers_key:
+                    return route
+
+        raise KeyError("Route requested does not exist.")
+
+    def lock_route(self, route: Route) -> None:
         """ Adds specified route to the 'locked routes' list."""
         if route in self.blocked_routes:
             raise RuntimeError('Cannot lock blocked route.')
+        route.is_locked = True
         self.locked_routes.append(route)
 
-    def unlock_route(self, route: DirectRoute) -> None:
+    def unlock_route(self, route: Route) -> None:
         """ Removes specified route from the 'locked routes' list."""
+        route.is_locked = False
         self.locked_routes.remove(route)
 
-    def block_route(self, route: DirectRoute) -> None:
+    def block_route(self, route: Route) -> None:
         """ Adds specified route to the 'blocked routes' list."""
         if route.demand.pattern.transport_concept == "FTL":
             raise ValueError('Cannot block FTL routes.')
         if route in self.locked_routes:
             raise RuntimeError('Cannot block locked routes.')
+        route.is_blocked = True
         self.blocked_routes.append(route)
 
-    def unblock_route(self, route: DirectRoute) -> None:
+    def unblock_route(self, route: Route) -> None:
         """ Removes specified route from the 'blocked routes' list."""
+        route.is_blocked = False
         self.blocked_routes.remove(route)
 
     @property
@@ -152,6 +191,25 @@ class Scenario:
         return {shipper.cofor: shipper
                 for hub in self.get_in_use_hubs()
                 for shipper in hub.shippers}
+
+    @property
+    def parts_hub_shippers(self):
+        """ COFOR Keyed dictionary of shippers currently in hubs."""
+        return {shipper.cofor: shipper
+                for hub in self.get_in_use_hubs()
+                for shipper in hub.shippers
+                if shipper.has_parts_demand
+                }
+
+    @property
+    def empties_hub_shippers(self):
+        """ COFOR Keyed dictionary of shippers currently in hubs."""
+        return {shipper.cofor: shipper
+                for hub in self.get_in_use_hubs()
+                if hub.has_empties_flow
+                for shipper in hub.shippers
+                if shipper.has_empties_demand
+                }
 
     @property
     def hub_swap_direct_shippers(self):
@@ -273,8 +331,19 @@ class Scenario:
         return _sum(routes, lambda r: r.loading_meters)
 
     @property
+    def parts_all_shippers(self):
+        return self.parts_direct_shippers | self.parts_hub_shippers
+
+    @property
+    def empties_all_shippers(self):
+        return self.empties_direct_shippers | self.empties_hub_shippers
+
+    @property
     def all_shippers(self):
         return self.direct_shippers | self.hub_shippers
+
+    def unassigned_shippers(self):
+        return
 
     def _get_direct_kpis(
             self,

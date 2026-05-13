@@ -105,3 +105,79 @@ def get_column_sequence_graf_format(
     )
 
     return full_sequence
+
+
+def get_graf_dtype_map(direct_or_hub: str) -> dict[str, str]:
+    direct_or_hub = direct_or_hub.lower()
+
+    start = {
+        "hub": {
+            "Route name": "string",
+            "HUB name": "string",
+            "HUB COFOR": "string",
+        },
+        "direct": {
+            "Tour name": "string",
+            "Route name": "string",
+        },
+    }
+
+    cofor_columns = {
+        "Shipper COFOR": "string",
+        "Seller COFOR": "string",
+        "Hybrid COFOR": "string",
+        "Plant COFOR": "string",
+    }
+
+    carrier_columns = {
+        "Carrier COFOR": "string",
+        "Carrier ID": "string",
+        "Carrier Name": "string",
+        "Carrier name": "string",
+    }
+
+    seller_shipper_columns = {
+        "SELLER NAME": "string",
+        "SELLER ZIP CODE": "string",
+        "SELLER CITY": "string",
+        "SELLER COUNTRY": "string",
+        "SHIPPER NAME": "string",
+        "SHIPPER  ZIP CODE": "string",
+        "SHIPPER CITY": "string",
+        "SHIPPER STREET": "string",
+        "SHIPPER COUNTRY": "string",
+        "SHIPPER SOURCING REGION": "string",
+    }
+
+    demand_columns_shipper = {
+        "Avg. Loading Meters / week": "float64",
+        "Avg. Weight / week": "float64",
+        "Avg. Volume / week": "float64",
+    }
+
+    demand_columns_direct = {
+        "Avg. Loading Meters / week on route": "float64",
+        "Avg. Loading Meters / Transport": "float64",
+        "Avg. Weight / week on route": "float64",
+        "Avg. Weight / Transport": "float64",
+        "Avg. Volume / week on route": "float64",
+        "Avg. Volume / Transport": "float64",
+    }
+
+    demand_columns_hub = {
+        "Avg. Loading Meters / week (Linehaul)": "float64",
+        "Avg. Loading Meters / Transport": "float64",
+        "Avg. Weight / week (Linehaul)": "float64",
+        "Avg. Weight / Transport": "float64",
+        "Avg. Volume / Transport (Linehaul)": "float64",
+        "Avg. Volume / Transport": "float64",
+    }
+
+    return {
+        **start[direct_or_hub],
+        **cofor_columns,
+        **carrier_columns,
+        **seller_shipper_columns,
+        **demand_columns_shipper,
+        **(demand_columns_hub if direct_or_hub == "hub" else demand_columns_direct),
+    }

@@ -33,6 +33,11 @@ class RoutePatternRepository:
                 route_name=route_name,
                 tour=group['Tour name'].iloc[0],
                 flow_direction="parts" if flow_direction == "P" else "empties",
+                overutilization={
+                    "one_truck": 0.10,
+                    "three_plus_trucks": 0.30,
+                    "five_plus_trucks": 0.50,
+                }
             )
 
             shipper_route_weight = (

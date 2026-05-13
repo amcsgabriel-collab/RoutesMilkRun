@@ -109,6 +109,7 @@ class DirectRoute(Route):
             "route_name": self.demand.pattern.route_name,
             "key": "|".join(sequence),
             "flow_direction": self.demand.flow_direction,
+            "network": "direct",
             "sequence": sequence,
         }
 

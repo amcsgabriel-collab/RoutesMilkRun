@@ -22,6 +22,7 @@ class Shipper:
             direct_carrier: Carrier | None = None,
             hub_carrier: Carrier | None = None,
             original_network: str | None = None,
+            assigned_hub_cofor: str | None = None,
             coordinates: tuple[float, float] | None = None,
     ):
         self.cofor = cofor

@@ -50,22 +50,24 @@ class WeightBasedCosting:
     def build_tariff_bundle(self, route: Route) -> list[tuple[str, tuple]]:
         carrier_group = route.carrier.group
 
+        tariff_weight = self.chargeable_weight(route) / max(route.frequency, 1)
+
         # Linehaul routes: try both LTL and HUB weight brackets
         if route.__class__.__name__ == "LinehaulRoute":
             ltl_common = (
                 carrier_group,
-                self.weight_bracket_ltl(route),
+                get_ltl_weight_bracket(tariff_weight),
             )
             hub_common = (
                 carrier_group,
-                self.weight_bracket_hub(route),
+                get_hub_weight_bracket(tariff_weight),
             )
             return _tariff_bundle(route, ltl_common) + _tariff_bundle(route, hub_common)
 
         # First-leg and everything else: normal LTL bracket only
         common = (
             carrier_group,
-            self.weight_bracket_ltl(route),
+            get_ltl_weight_bracket(tariff_weight),
         )
         return _tariff_bundle(route, common)
 

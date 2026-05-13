@@ -5,6 +5,12 @@ from ..data_structures import Plant
 from ..domain_algorithms import get_deviation_bin, greedy_nearest_neighbor, make_haversine_cache
 
 
+DEFAULT_OVERUTILIZATION = {
+    "one_truck": 0.0,
+    "three_plus_trucks": 0.0,
+    "five_plus_trucks": 0.0,
+}
+
 class RoutePattern:
     count_of_stops: int
     starting_point: Shipper
@@ -16,14 +22,11 @@ class RoutePattern:
             shippers: set[Shipper],
             plant: Plant,
             flow_direction: str,
+            overutilization: dict[str, float] | None = None,
             route_name: str | None = None,
             tour: str | None = None,
-            mr_overutilization_rate: float = 0.05,
     ):
         self.count_of_stops = len(shippers)
-        # if self.count_of_stops > 4:
-        #     shipper_cofors = [s.cofor for s in shippers]
-        #     raise ValueError(f'Milkrun routes cannot have more than 4 stops. Route {route_name} got {self.count_of_stops}: {", ".join(shipper_cofors)}')
         if self.count_of_stops == 0:
             raise ValueError(f'Passed shippers list for Route {route_name} is empty. Please verify.')
         self.shippers = frozenset(shippers)
@@ -40,14 +43,13 @@ class RoutePattern:
         self.deviation = None
         self.deviation_bin = None
         self.mr_cluster = None
-
         self.carriers = {s.carrier.group for s in shippers}
-        if len(self.carriers) > 1:
-            raise ValueError(f'Route {route_name}: Milkrun routes cannot have more than one carrier.')
-        self.carrier = self.carriers.pop()
 
         self.transport_concept = "MR" if self.count_of_stops > 1 else "FTL"
-        self.overutilization = 1.0 + (mr_overutilization_rate if self.transport_concept == "MR" else 0)
+        self.overutilization = {
+            **DEFAULT_OVERUTILIZATION,
+            **(overutilization or {}),
+        }
 
     def __eq__(self, other):
         return (isinstance(other, RoutePattern)
@@ -68,6 +70,10 @@ class RoutePattern:
 
     def _demand(self, shipper: Shipper):
         return shipper.parts_demand if self.flow_direction == "parts" else shipper.empties_demand
+
+    @property
+    def carrier(self):
+        return self.starting_point.carrier
 
     @property
     def weight(self):
@@ -127,6 +133,7 @@ class RoutePattern:
             plant=self.plant,
             flow_direction=self.flow_direction,
             route_name=self.route_name,
+            overutilization=self.overutilization,
         )
         new_pattern.shipper_allocation = {
             s: self.shipper_allocation[s]
@@ -137,3 +144,17 @@ class RoutePattern:
 
     def get_name(self, roundtrip_id):
         return f'{self.starting_point.cofor}_{roundtrip_id}'
+
+    def overutilization_rate(self, non_rounded_trucks: float) -> float:
+        if self.transport_concept != "MR":
+            return 0.0
+
+        rounded_down = int(non_rounded_trucks)
+
+        if rounded_down >= 5:
+            return float(self.overutilization["five_plus_trucks"])
+
+        if rounded_down >= 3:
+            return float(self.overutilization["three_plus_trucks"])
+
+        return float(self.overutilization["one_truck"])

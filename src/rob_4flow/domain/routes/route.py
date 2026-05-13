@@ -1,6 +1,6 @@
+
 import copy
 from abc import abstractmethod, ABCMeta
-from math import ceil
 
 from ..data_structures import Vehicle, Carrier
 from ..domain_algorithms import get_deviation_bin
@@ -26,6 +26,8 @@ class Route(metaclass=ABCMeta):
         self.costing = costing
         self.tariff = None
         self.tariff_source = None
+        self.is_locked = False
+        self.is_blocked = False
 
     def copy(self):
         return copy.deepcopy(self)
@@ -35,20 +37,30 @@ class Route(metaclass=ABCMeta):
         capacity_value = getattr(self.vehicle, capacity_attr)
 
         denominator = capacity_value
+
         if use_frequency:
             denominator *= self.frequency
-        else:
-            denominator *= self.demand.overutilization
 
         return _safe_div(demand_value, denominator)
 
     @property
     def frequency(self) -> int:
-        max_ratio = max(
-            self._ratio(demand_attr, capacity_attr)
+        non_rounded_trucks = max(
+            _safe_div(getattr(self.demand, demand_attr), getattr(self.vehicle, capacity_attr))
             for demand_attr, capacity_attr in self.METRICS
         )
-        return ceil(max_ratio) if max_ratio > 0 else 0
+
+        if non_rounded_trucks <= 0:
+            return 0
+
+        overutilization_rate = self.demand.overutilization_rate(non_rounded_trucks)
+        rounded_down = int(non_rounded_trucks)
+        decimal_part = non_rounded_trucks - rounded_down
+
+        if rounded_down <= 0:
+            return 1
+
+        return rounded_down if decimal_part <= overutilization_rate else rounded_down + 1
 
     def utilization(self, metric: str) -> float:
         capacity_attr = f"{metric}_capacity"

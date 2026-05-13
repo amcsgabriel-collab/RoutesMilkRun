@@ -1,4 +1,39 @@
 <h3>Optimize Scenario</h3>
-<p>Scenario Optimization Solver is running... please wait</p>
+<label id="status-log">Configure and click "solve" to run.</label>
+<div class="solver-toolbar">
+  <div class="solver-toolbar-left">
+    <button id="solve-run" type="button">Run</button>
+
+    <label class="solver-checkbox">
+      <input id="solve-hubs" type="checkbox" />
+      Solve hubs
+    </label>
+
+    <label class="solver-checkbox">
+      <input id="max-stops" type="number" min="1" step="1" value="4" />
+      Max Stops
+    </label>
+  </div>
+
+  <div class="solver-toolbar-right">
+    <label class="solver-overutil-group">
+      <span>1 truck</span>
+      <input id="overutil-1" type="number" min="0" step="1" value="10" />
+      <span>%</span>
+    </label>
+
+    <label class="solver-overutil-group">
+      <span>3+ trucks</span>
+      <input id="overutil-3" type="number" min="0" step="1" value="30" />
+      <span>%</span>
+    </label>
+
+    <label class="solver-overutil-group">
+      <span>5+ trucks</span>
+      <input id="overutil-5" type="number" min="0" step="1" value="50" />
+      <span>%</span>
+    </label>
+  </div>
+</div>
 <div><strong>Log</strong></div>
 <pre id="solve-task-log"></pre>

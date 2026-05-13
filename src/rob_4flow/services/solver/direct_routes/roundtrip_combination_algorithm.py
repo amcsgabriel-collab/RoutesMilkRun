@@ -1,4 +1,4 @@
-from ..domain.trip import Trip
+from ....domain.trip import Trip
 
 
 def _chunk_frequency(freq: int, max_chunk: int = 5) -> list[int]:

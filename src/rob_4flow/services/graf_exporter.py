@@ -26,7 +26,7 @@ def export_graf(
     hubs_dataframe = pd.concat(hub_frames, ignore_index=True) if hub_frames else pd.DataFrame()
 
     with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
-        sheet1 = 'Direct GRAF Template'
+        sheet1 = 'Direct RAF Template'
         if not trips_dataframe.empty:
             trips_dataframe.to_excel(
                 writer,
@@ -43,7 +43,7 @@ def export_graf(
         else:
             pd.DataFrame().to_excel(writer, sheet_name=sheet1, index=False)
 
-        sheet2 = 'GRP GRAF Template'
+        sheet2 = 'GRP RAF Template'
         if not hubs_dataframe.empty:
             hubs_dataframe.to_excel(
                 writer,

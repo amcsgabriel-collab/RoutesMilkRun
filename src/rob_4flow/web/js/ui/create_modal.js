@@ -4,7 +4,7 @@
 
 import { loadHtml } from '../utils.js';
 import { apiPost } from "../api.js";
-import { showProjectPage } from "../views/project.js";
+import { showProjectPage } from "../views/project/project.js";
 import { setAppBusy } from "./overlay.js";
 import { openModal, closeModal } from "./modal.js";
 
